@@ -31,6 +31,9 @@ function SerialConnection() {
     const {
         toolHead, headType, series: seriesInfo
     } = useSelector(state => state?.workspace);
+    console.log('seriesInfo', seriesInfo);
+    // Available serial ports
+    const [ports, setPorts] = useState([]);
     // Selected port
     const [portState, setPortState] = useState(server);
     // connect status: 'idle', 'connecting', 'connected'
