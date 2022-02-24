@@ -1363,10 +1363,11 @@ export const actions = {
             return;
         }
         // update extruder definitions
+        const hasPrimeTower = (printingToolhead === DUAL_EXTRUDER_TOOLHEAD_FOR_SM2 && activeDefinition.settings.prime_tower_enable.default_value);
         const indexL = materialDefinitions.findIndex(d => d.definitionId === defaultMaterialId);
         const indexR = materialDefinitions.findIndex(d => d.definitionId === defaultMaterialIdRight);
-        const newExtruderLDefinition = definitionManager.finalizeExtruderDefinition(extruderLDefinition, materialDefinitions[indexL]);
-        const newExtruderRDefinition = definitionManager.finalizeExtruderDefinition(extruderRDefinition, materialDefinitions[indexR]);
+        const newExtruderLDefinition = definitionManager.finalizeExtruderDefinition(extruderLDefinition, materialDefinitions[indexL], hasPrimeTower);
+        const newExtruderRDefinition = definitionManager.finalizeExtruderDefinition(extruderRDefinition, materialDefinitions[indexR], hasPrimeTower);
         dispatch(actions.updateState({
             extruderLDefinition: newExtruderLDefinition,
             extruderRDefinition: newExtruderRDefinition
@@ -1404,7 +1405,6 @@ export const actions = {
         const { model, support, definition, originalName } = await dispatch(actions.prepareModel());
         const currentModelName = path.basename(models[0]?.modelName, path.extname(models[0]?.modelName));
         const renderGcodeFileName = `${currentModelName}_${new Date().getTime()}`;
-        const hasPrimeTower = (printingToolhead === DUAL_EXTRUDER_TOOLHEAD_FOR_SM2 && activeDefinition.settings.prime_tower_enable.default_value);
         // Prepare definition file
         await dispatch(actions.updateActiveDefinitionMachineSize(size));
         if (hasPrimeTower) {

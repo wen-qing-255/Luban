@@ -2,7 +2,8 @@ import { includes } from 'lodash';
 import api from '../../api';
 import i18n from '../../lib/i18n';
 import { HEAD_CNC, RIGHT_EXTRUDER_MAP_NUMBER,
-    PRINTING_MATERIAL_CONFIG_KEYS_SINGLE
+    PRINTING_MATERIAL_CONFIG_KEYS_SINGLE,
+    MACHINE_EXTRUDER_CONFIG_KEY_MAP
 } from '../../constants';
 
 const primeTowerDefinitionKeys = [
@@ -364,7 +365,7 @@ class DefinitionManager {
         return definition;
     }
 
-    finalizeExtruderDefinition(extruderDefinition, materialDefinition) {
+    finalizeExtruderDefinition(extruderDefinition, materialDefinition, hasPrimeTower = false) {
         const definition = {
             ...extruderDefinition
         };
@@ -377,6 +378,20 @@ class DefinitionManager {
                     };
                 }
             });
+        if (hasPrimeTower) {
+            Object.keys(MACHINE_EXTRUDER_CONFIG_KEY_MAP).forEach(keyItem => {
+                const setting = definition.settings[MACHINE_EXTRUDER_CONFIG_KEY_MAP[keyItem]];
+                if (setting) {
+                    console.log(keyItem, setting);
+                    definition.settings[keyItem] = setting;
+                }
+            });
+        } else {
+            Object.keys(MACHINE_EXTRUDER_CONFIG_KEY_MAP).forEach(keyItem => {
+                delete definition.settings[keyItem];
+            });
+        }
+        console.log(definition, hasPrimeTower);
         return definition;
     }
 

@@ -121,6 +121,12 @@ export const PRINTING_MATERIAL_CONFIG_KEYS_DUAL = [
     'retraction_hop_enabled',
     'retraction_hop'
 ];
+export const MACHINE_EXTRUDER_CONFIG_KEY_MAP = {
+    'machine_extruder_start_pos_x': 'extruder_prime_pos_x',
+    'machine_extruder_start_pos_y': 'extruder_prime_pos_y',
+    'machine_extruder_end_pos_x': 'extruder_prime_pos_x',
+    'machine_extruder_end_pos_y': 'extruder_prime_pos_y'
+};
 export const PRINTING_QUALITY_CONFIG_KEYS_SINGLE = [
     'layer_height',
     'layer_height_0',
