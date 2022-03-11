@@ -108,6 +108,8 @@ export const PRINTING_MATERIAL_CONFIG_KEYS_SINGLE = [
     // Temperature
     'material_diameter',
     'material_print_temperature',
+    'material_final_print_temperature',
+    'material_standby_temperature',
     'material_print_temperature_layer_0',
     'cool_fan_speed',
     'machine_heated_bed',
@@ -130,6 +132,8 @@ export const PRINTING_MATERIAL_CONFIG_KEYS_DUAL = [
     // Temperature
     'material_diameter',
     'material_print_temperature',
+    'material_final_print_temperature',
+    'material_standby_temperature',
     'material_print_temperature_layer_0',
     'cool_fan_speed',
     'machine_heated_bed',
@@ -217,9 +221,9 @@ export const PRINTING_QUALITY_CONFIG_KEYS_DUAL = [
     'prime_tower_enable',
     'ooze_shield_enabled',
     'ooze_shield_angle',
-    'ooze_shield_dist',
-    'switch_extruder_retraction_amount',
-    'switch_extruder_retraction_speeds'
+    'ooze_shield_dist'
+    // 'switch_extruder_retraction_amount',
+    // 'switch_extruder_retraction_speeds'
 ];
 export const MACHINE_EXTRUDER_X = ['machine_extruder_start_pos_x', 'machine_extruder_end_pos_x'];
 export const MACHINE_EXTRUDER_Y = ['machine_extruder_start_pos_y', 'machine_extruder_end_pos_y'];
@@ -235,6 +239,8 @@ export const PRINTING_MATERIAL_CONFIG_GROUP_SINGLE = [
         fields: [
             'material_diameter',
             'material_print_temperature',
+            'material_final_print_temperature',
+            'material_standby_temperature',
             'material_print_temperature_layer_0',
             'cool_fan_speed',
             'machine_heated_bed',
@@ -273,6 +279,8 @@ export const PRINTING_MATERIAL_CONFIG_GROUP_DUAL = [
         fields: [
             'material_diameter',
             'material_print_temperature',
+            'material_final_print_temperature',
+            'material_standby_temperature',
             'material_print_temperature_layer_0',
             'cool_fan_speed',
             'machine_heated_bed',
@@ -293,7 +301,9 @@ export const PRINTING_MATERIAL_CONFIG_GROUP_DUAL = [
             'retraction_enable',
             'retract_at_layer_change',
             'retraction_amount',
+            'switch_extruder_retraction_amount',
             'retraction_speed',
+            'switch_extruder_retraction_speeds',
             'retraction_hop_enabled',
             'retraction_hop'
         ]
@@ -441,8 +451,8 @@ export const PRINTING_QUALITY_CONFIG_GROUP_DUAL = [
             'ooze_shield_enabled',
             'ooze_shield_angle',
             'ooze_shield_dist',
-            'switch_extruder_retraction_amount',
-            'switch_extruder_retraction_speeds'
+            // 'switch_extruder_retraction_amount',
+            // 'switch_extruder_retraction_speeds'
         ]
     }
 ];
