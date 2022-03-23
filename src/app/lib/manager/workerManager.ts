@@ -10,6 +10,7 @@ export enum WorkerMethods {
     gcodeToBufferGeometry = 'gcodeToBufferGeometry',
     heartBeat = 'heartBeat',
     loadModel = 'loadModel',
+    scaleToFitWithRotate = 'scaleToFitWithRotate',
     toolpathRenderer = 'toolpathRenderer'
     // LUBAN worker methods END
 }
