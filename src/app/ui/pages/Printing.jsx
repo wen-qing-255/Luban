@@ -211,6 +211,7 @@ function useRenderMainToolBar() {
             <MainToolBar
                 leftItems={leftItems}
                 lang={i18next.language}
+                headType={HEAD_PRINTING}
             />
         );
     }
