@@ -10,6 +10,7 @@ import modal from '../../../lib/modal';
 import SvgIcon from '../../components/SvgIcon';
 import RotationAnalysisOverlay from './Overlay/RotationAnalysisOverlay';
 import EditSupportOverlay from './Overlay/EditSupportOverlay';
+/* eslint-disable-next-line import/no-cycle */
 import SupportOverlay from './Overlay/SupportOverlay';
 import { DUAL_EXTRUDER_TOOLHEAD_FOR_SM2, EPSILON } from '../../../constants';
 import { machineStore } from '../../../store/local-storage';
