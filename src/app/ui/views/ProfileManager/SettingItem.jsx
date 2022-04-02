@@ -202,7 +202,7 @@ function SettingItem({ definitionKey, settings, isDefaultDefinition = () => true
                             onChange={(option) => {
                                 onChangeDefinition(definitionKey, option.value);
                             }}
-                            disabled={officalDefinition && managerType === HEAD_CNC}
+                            disabled={officalDefinition && managerType === HEAD_CNC && definitionKey === 'tool_type'}
                         />
                     )}
                     {type === undefined && (
