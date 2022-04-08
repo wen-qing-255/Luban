@@ -136,7 +136,9 @@ export const PRINTING_MATERIAL_CONFIG_KEYS_DUAL = [
     'material_standby_temperature',
     'material_print_temperature_layer_0',
     'cool_fan_speed',
+    'cool_fan_speed_0',
     'machine_heated_bed',
+    'cool_fan_full_layer',
     'material_bed_temperature',
     'material_bed_temperature_layer_0',
     // Extrude
@@ -148,7 +150,8 @@ export const PRINTING_MATERIAL_CONFIG_KEYS_DUAL = [
     'retraction_amount',
     'retraction_speed',
     'retraction_hop_enabled',
-    'retraction_hop'
+    'retraction_hop',
+    'switch_extruder_retraction_amount'
 ];
 export const PRINTING_QUALITY_CONFIG_KEYS_SINGLE = [
     'layer_height',
@@ -219,6 +222,7 @@ export const PRINTING_QUALITY_CONFIG_KEYS_DUAL = [
     'support_z_distance',
     // 'dual'
     'prime_tower_enable',
+    'prime_tower_wipe_enabled',
     'ooze_shield_enabled',
     'ooze_shield_angle',
     'ooze_shield_dist'
@@ -243,6 +247,7 @@ export const PRINTING_MATERIAL_CONFIG_GROUP_SINGLE = [
             'material_standby_temperature',
             'material_print_temperature_layer_0',
             'cool_fan_speed',
+            'cool_fan_full_layer',
             'machine_heated_bed',
             'material_bed_temperature',
             'material_bed_temperature_layer_0'
@@ -283,6 +288,8 @@ export const PRINTING_MATERIAL_CONFIG_GROUP_DUAL = [
             'material_standby_temperature',
             'material_print_temperature_layer_0',
             'cool_fan_speed',
+            'cool_fan_speed_0',
+            'cool_fan_full_layer',
             'machine_heated_bed',
             'material_bed_temperature',
             'material_bed_temperature_layer_0'
@@ -448,9 +455,10 @@ export const PRINTING_QUALITY_CONFIG_GROUP_DUAL = [
         name: 'Dual Extrusion',
         fields: [
             'prime_tower_enable',
+            'prime_tower_wipe_enabled',
             'ooze_shield_enabled',
             'ooze_shield_angle',
-            'ooze_shield_dist',
+            'ooze_shield_dist'
             // 'switch_extruder_retraction_amount',
             // 'switch_extruder_retraction_speeds'
         ]
