@@ -4,13 +4,13 @@
 import path from 'path';
 import isFunction from 'lodash/isFunction';
 
-function random(n) {
-    let s = '';
-    for (let i = 0; i < n; i++) {
-        s += parseInt(Math.random() * 10, 10);
-    }
-    return s;
-}
+// function random(n) {
+//     let s = '';
+//     for (let i = 0; i < n; i++) {
+//         s += parseInt(Math.random() * 10, 10);
+//     }
+//     return s;
+// }
 
 // 17 digits
 function timestamp() {
@@ -72,10 +72,15 @@ function pathWithRandomSuffix(pathString) {
 
 function generateRandomPathName(suffix, shouldLowerCase = false) {
     const dot = suffix.lastIndexOf('.');
+    let fileName = '';
+    console.log({ suffix, dot });
     if (dot !== -1) {
+        fileName = suffix.substr(0, dot);
         suffix = shouldLowerCase ? (suffix.substr(dot + 1)).toLowerCase() : suffix.substr(dot + 1);
+        console.log({ fileName });
     }
-    return `${random(8)}_${timestamp()}.${suffix}`;
+    return `${fileName}_${new Date().getTime()}.${suffix}`;
+    // return `${random(8)}_${timestamp()}.${suffix}`;
 }
 
 
