@@ -369,11 +369,12 @@ class SocketHttp {
         } else if (type === HEAD_CNC) {
             type = 'CNC';
         }
+        // Add filename params: send filename to screen 
         request
             .post(api)
             .field('token', this.token)
             .field('type', type)
-            .attach('file', gcodeFilePath)
+            .attach('file', gcodeFilePath, { filename: 'testtest' })
             .end((err, res) => {
                 const { msg, data } = _getResult(err, res);
                 if (callback) {
