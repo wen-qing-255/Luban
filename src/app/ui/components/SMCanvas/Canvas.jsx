@@ -610,8 +610,22 @@ class Canvas extends PureComponent {
             if (this.transformSourceType === '2D') {
                 this.light.position.copy(this.camera.position);
             }
-            if (this.controls.transformControl.mode === 'rotate' && this.modelGroup.selectedModelArray[0]?.type !== 'primeTower') {
-                this.cloneRotatePeripheral = this.controls.transformControl.rotatePeripheral.clone();
+            if (this.controls.transformControl.mode !== 'mirror' && this.modelGroup.selectedModelArray && this.modelGroup.selectedModelArray[0]?.type !== 'primeTower') {
+                // this.cloneRotatePeripheral = this.controls.transformControl.rotatePeripheral.clone();
+                switch (this.controls.transformControl.mode) {
+                    case 'translate':
+                        this.cloneControlPeripheral = this.controls.transformControl.translatePeripheral.clone();
+                        break;
+                    case 'rotate':
+                        this.cloneControlPeripheral = this.controls.transformControl.rotatePeripheral.clone();
+                        break;
+                    case 'scale':
+                        this.cloneControlPeripheral = this.controls.transformControl.scalePeripheral.clone();
+                        break;
+                    default:
+                        this.cloneControlPeripheral = this.controls.transformControl.translatePeripheral.clone();
+                        break;
+                }
 
                 this.cloneRotatePeripheral.updateMatrixWorld();
                 this.rotateFontLeftTop.setFromMatrixPosition(this.cloneRotatePeripheral.matrixWorld);
@@ -630,7 +644,7 @@ class Canvas extends PureComponent {
                 inputDOM.style.left = this.inputPositionLeft;
                 this.controls.transformControl.dragging && (inputDOM.style.display = 'block');
             }
-            if (this.controls.transformControl.mode !== 'rotate' || !this.modelGroup.selectedModelArray.length || this.modelGroup.hasHideModel()) {
+            if (!this.modelGroup.selectedModelArray?.length || this.modelGroup.hasHideModel()) {
                 inputDOM && (inputDOM.style.display = 'none');
             }
             this.renderer.render(this.scene, this.camera);
