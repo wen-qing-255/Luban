@@ -299,6 +299,7 @@ class Visualizer extends PureComponent {
                     originOffset,
                     // for serialport indiviual
                     workflowState,
+                    renderGcodeFileName: gcodeFile.renderGcodeFileName
                 }, (res) => {
                     if (res) {
                         const { msg, code } = res;

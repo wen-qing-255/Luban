@@ -360,7 +360,7 @@ class SocketHttp {
         });
     }
 
-    public uploadGcodeFile = (gcodeFilePath:string, type:string, callback) => {
+    public uploadGcodeFile = (gcodeFilePath:string, type:string, renderGcodeFileName:string, callback) => {
         const api = `${this.host}/api/v1/prepare_print`;
         if (type === HEAD_PRINTING) {
             type = '3DP';
@@ -374,7 +374,7 @@ class SocketHttp {
             .post(api)
             .field('token', this.token)
             .field('type', type)
-            .attach('file', gcodeFilePath, { filename: 'testtest' })
+            .attach('file', gcodeFilePath, { filename: renderGcodeFileName })
             .end((err, res) => {
                 const { msg, data } = _getResult(err, res);
                 if (callback) {
@@ -412,6 +412,7 @@ class SocketHttp {
     };
 
     public uploadFile = (options: EventOptions) => {
+        // TODO: Add filename params
         const { gcodePath, eventName } = options;
         const api = `${this.host}/api/v1/upload`;
         request
