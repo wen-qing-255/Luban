@@ -122,10 +122,11 @@
     color: $blue-2;
     line-height: 16px;
     &:hover {
-    color: $blue-3;
+        color: $blue-3;
+        cursor: pointer;
     }
     &:active {
-    color: $blue-1;
+        color: $blue-1;
     }
 }
 
@@ -162,4 +163,12 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.text-overflow-ellipsis-line-2 {
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    display: -webkit-box;
 }

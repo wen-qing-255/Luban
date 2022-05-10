@@ -30,10 +30,10 @@ import urljoin from './lib/urljoin';
 import logger from './lib/logger';
 import { registerApis } from './services';
 import settings from './config/settings';
-import errclient from './lib/middleware/errclient';
-import errlog from './lib/middleware/errlog';
-import errnotfound from './lib/middleware/errnotfound';
-import errserver from './lib/middleware/errserver';
+// import errclient from './lib/middleware/errclient';
+// import errlog from './lib/middleware/errlog';
+// import errnotfound from './lib/middleware/errnotfound';
+// import errserver from './lib/middleware/errserver';
 import config from './services/configstore';
 import {
     IP_WHITELIST,
@@ -62,16 +62,13 @@ const verifyToken = (token) => {
     }
     return true;
 };
+const DEFAULT_FILE = 'index.html';
 
 const createApplication = () => {
     const app = express();
 
     // Settings
     if (process.env.NODE_ENV === 'development') {
-        const webpackDevServer = require('./webpack-dev-server').default;
-
-        webpackDevServer(app);
-
         // Error handler - https://github.com/expressjs/errorhandler
         // Development error handler, providing stack traces and error message responses
         // for requests accepting text, html, or json.
@@ -127,6 +124,7 @@ const createApplication = () => {
 
         next();
     });
+
 
     // Removes the 'X-Powered-By' header in earlier versions of Express
     app.use((req, res, next) => {
@@ -186,9 +184,9 @@ const createApplication = () => {
     if (settings.verbosity > 0) {
         // https://github.com/expressjs/morgan#use-custom-token-formats
         // Add an ID to all requests and displays it using the :id token
-        morgan.token('id', (req) => {
-            return req.session.id;
-        });
+        // morgan.token('id', (req) => {
+        //     return req.session.id;
+        // });
         app.use(morgan(settings.middleware.morgan.format));
     }
     app.use(compress(settings.middleware.compression));
@@ -254,8 +252,13 @@ const createApplication = () => {
     // register http service api
     registerApis(app);
     // Also see "src/app/app.js"
+    app.use((req, res) => {
+        if (req.method === 'OPTIONS') {
+            res.sendStatus(200);
+        }
+    });
     // page
-    app.get(urljoin(settings.route, '/'), renderPage('index.hbs', (req) => {
+    app.get(urljoin(settings.route, '/'), renderPage(DEFAULT_FILE, (req) => {
         const webroot = settings.assets.app.routes[0] || ''; // with trailing slash
         const lng = req.language;
         const t = req.t;
@@ -269,19 +272,35 @@ const createApplication = () => {
     }));
 
     // Error handling
-    app.use(errlog());
-    app.use(errclient({
-        error: 'XHR error'
-    }));
-    app.use(errnotfound({
-        view: path.join('common', '404.hogan'),
-        error: 'Not found'
-    }));
-    app.use(errserver({
-        view: path.join('common', '500.hogan'),
-        error: 'Internal server error'
-    }));
+    app.use((err, req, res) => {
+        if (err) {
+            log.error(err);
+            res.status(500).send({ error: err.message });
+        } else {
+            res.status(404).send({ msg: 'Not found' });
+        }
+    });
+    // app.use(errlog());
+    // app.use(errclient({
+    //     error: 'XHR error'
+    // }));
+    // app.use(errnotfound({
+    //     view: path.join('common', '404.hogan'),
+    //     error: 'Not found'
+    // }));
+    // app.use(errserver({
+    //     view: path.join('common', '500.hogan'),
+    //     error: 'Internal server error'
+    // }));
     return app;
 };
+
+process.on('uncaughtException', (err) => {
+    log.error('uncaught exception', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    log.error('unhandled rejection', promise, 'reason', reason);
+});
 
 export default createApplication;

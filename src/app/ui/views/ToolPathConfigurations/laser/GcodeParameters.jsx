@@ -18,7 +18,8 @@ class GcodeParameters extends PureComponent {
         toolDefinitions: PropTypes.array.isRequired,
         setCurrentToolDefinition: PropTypes.func.isRequired,
         isModifiedDefinition: PropTypes.bool.isRequired,
-        setCurrentValueAsProfile: PropTypes.func.isRequired
+        setCurrentValueAsProfile: PropTypes.func.isRequired,
+        isModel: PropTypes.bool
     };
 
     state = {
@@ -66,6 +67,9 @@ class GcodeParameters extends PureComponent {
             laserDefinitionFillKeys.push('movementMode');
             if (isSVG) {
                 laserDefinitionFillKeys.push('fillInterval');
+                if (movementMode === 'greyscale-line') {
+                    laserDefinitionFillKeys.push('direction');
+                }
             } else if (isImage) {
                 if (movementMode === 'greyscale-line') {
                     laserDefinitionFillKeys.push('direction');
@@ -94,10 +98,12 @@ class GcodeParameters extends PureComponent {
 
         // Session Speed
         const laserDefinitionSpeedKeys = ['jogSpeed'];
-        if (pathType === 'fill' || movementMode === 'greyscale-line') {
+        if (pathType === 'fill' && movementMode === 'greyscale-line') {
+            laserDefinitionSpeedKeys.push('workSpeed');
+        } else if (pathType === 'path') {
             laserDefinitionSpeedKeys.push('workSpeed');
         }
-        if (movementMode === 'greyscale-dot') {
+        if (pathType === 'fill' && movementMode === 'greyscale-dot') {
             laserDefinitionSpeedKeys.push('dwellTime');
         }
         const laserDefinitionSpeed = {};
@@ -148,6 +154,7 @@ class GcodeParameters extends PureComponent {
                         setCurrentToolDefinition={this.props.setCurrentToolDefinition}
                         isModifiedDefinition={this.props.isModifiedDefinition}
                         setCurrentValueAsProfile={this.props.setCurrentValueAsProfile}
+                        isModel={this.props.isModel}
                     />
                     <ToolParameters
                         settings={laserDefinitionMethod}

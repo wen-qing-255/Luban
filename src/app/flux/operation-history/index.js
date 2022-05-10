@@ -1,9 +1,11 @@
 import { baseActions as editorBaseActions } from '../editor/actions-base';
 import { baseActions as printingBaseActions } from '../printing/actions-base';
+/* eslint-disable-next-line import/no-cycle */
+import { actions as projectActions } from '../project';
 
 const updateState = (headType, state) => {
     if (headType === 'printing') {
-        return printingBaseActions.updateState(state);
+        return printingBaseActions.updateState(headType, state);
     } else if (headType === 'cnc' || headType === 'laser') {
         return editorBaseActions.updateState(headType, state);
     }
@@ -33,6 +35,7 @@ export const actions = {
             dispatch(updateState(headType, {
                 history
             }));
+            dispatch(projectActions.autoSaveEnvironment(headType));
         }
     },
     clear: (headType) => (dispatch, getState) => {
@@ -45,6 +48,7 @@ export const actions = {
     undo: (headType) => (dispatch, getState) => {
         const { history } = getState()[headType];
         history.undo();
+        dispatch(projectActions.autoSaveEnvironment(headType));
         dispatch(updateState(headType, {
             history
         }));
@@ -52,6 +56,7 @@ export const actions = {
     redo: (headType) => (dispatch, getState) => {
         const { history } = getState()[headType];
         history.redo();
+        dispatch(projectActions.autoSaveEnvironment(headType));
         dispatch(updateState(headType, {
             history
         }));

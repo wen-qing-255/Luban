@@ -1,5 +1,5 @@
 import React, { PureComponent } from 'react';
-import { Color, HemisphereLight, PerspectiveCamera, Scene, Vector3 } from 'three';
+import { Color, HemisphereLight, PerspectiveCamera, Scene, Vector3, Group } from 'three';
 import PropTypes from 'prop-types';
 
 import ThreeUtils from '../../../three-extensions/ThreeUtils';
@@ -27,15 +27,15 @@ class Thumbnail extends PureComponent {
     }
 
     componentDidMount() {
-        const width = 300;
-        const height = 200;
+        const width = 720;
+        const height = 480;
 
         this.camera = new PerspectiveCamera(45, width / height, 0.1, 10000);
         this.camera.position.copy(new Vector3(0, 120, 500));
 
         this.renderer = new WebGLRendererWrapper({ antialias: true, preserveDrawingBuffer: true });
         this.renderer.setClearColor(new Color(0xfafafa), 1);
-        // this.renderer.setSize(width, height);
+        this.renderer.setSize(width, height);
         // this.renderer.shadowMap.enabled = true;
 
         this.scene = new Scene();
@@ -56,7 +56,8 @@ class Thumbnail extends PureComponent {
 
     getThumbnail() {
         this.object && (this.scene.remove(this.object));
-        this.object = this.props.modelGroup.object.clone();
+        this.object = new Group();
+        this.object.add(...this.props.modelGroup.getModels('primeTower').map(d => d.clone().meshObject));
 
         // calculate center point
         const boundingBox = ThreeUtils.computeBoundingBox(this.object);

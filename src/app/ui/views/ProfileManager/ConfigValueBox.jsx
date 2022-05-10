@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import PropTypes from 'prop-types';
-import { includes } from 'lodash';
+import { includes, throttle } from 'lodash';
 import classNames from 'classnames';
 import i18n from '../../../lib/i18n';
 import SettingItem from './SettingItem';
@@ -8,24 +8,24 @@ import CheckboxItem from './CheckboxItem';
 import Anchor from '../../components/Anchor';
 import styles from './styles.styl';
 import SvgIcon from '../../components/SvgIcon';
+import { HEAD_CNC } from '../../../constants';
 
-function ConfigValueBox({ optionConfigGroup, calculateTextIndex, isCategorySelected, type = 'input', isOfficialDefinition = () => true, onChangeDefinition, selectedSettingDefaultValue, definitionForManager, customConfigs, showMiddle = false, hideMiniTitle = false }) {
+function ConfigValueBox({ optionConfigGroup, calculateTextIndex, isCategorySelected, type = 'input', isOfficialDefinition = () => true, onChangeDefinition, selectedSettingDefaultValue, definitionForManager, customConfigs, showMiddle = false, hideMiniTitle = false, managerType }) {
     const [activeCateId, setActiveCateId] = useState(2);
     const scrollDom = useRef(null);
     const fieldsDom = useRef([]);
     function setActiveCate(cateId) {
         if (scrollDom.current) {
             const container = scrollDom.current.parentElement;
-            const offsetTops = [...scrollDom.current.children].map(i => i.offsetTop);
+            const offsetTops = [...scrollDom.current.children].map(i => i.offsetTop - 92);
             if (cateId !== undefined) {
-                container.scrollTop = offsetTops[cateId] - 80;
+                container.scrollTop = offsetTops[cateId];
             } else {
                 cateId = offsetTops.findIndex((item, idx) => item < container.scrollTop && offsetTops[idx + 1] > container.scrollTop);
                 cateId = Math.max(cateId, 0);
             }
             setActiveCateId(cateId);
         }
-        return true;
     }
     useEffect(() => {
         fieldsDom.current = fieldsDom.current.slice(0, Object.keys(optionConfigGroup).length);
@@ -52,7 +52,6 @@ function ConfigValueBox({ optionConfigGroup, calculateTextIndex, isCategorySelec
                                     {group.name && (
                                         <Anchor
                                             className={classNames(styles.item, { [styles.selected]: idx === activeCateId })}
-
                                             onClick={() => {
                                                 setActiveCate(idx);
                                             }}
@@ -69,7 +68,11 @@ function ConfigValueBox({ optionConfigGroup, calculateTextIndex, isCategorySelec
             )}
             <div
                 className={classNames(styles['manager-details'], 'border-default-grey-1', 'border-radius-8')}
-                onWheel={() => { setActiveCate(); }}
+                onWheel={
+                    throttle(() => {
+                        setActiveCate();
+                    }, 200, { 'leading': false, 'trailing': true })
+                }
             >
                 <div className="sm-parameter-container" ref={scrollDom}>
                     {!isCategorySelected && optionConfigGroup.map((group, index) => {
@@ -87,40 +90,49 @@ function ConfigValueBox({ optionConfigGroup, calculateTextIndex, isCategorySelec
                                         </div>
                                     )}
                                     {/* eslint no-return-assign: 0*/}
-                                    <div ref={el => fieldsDom.current[index] = el}>
-                                        { group.fields && group.fields.map((key) => {
-                                            if (type === 'input') {
-                                                return (
-                                                    <SettingItem
-                                                        settings={definitionForManager?.settings}
-                                                        definitionKey={key}
-                                                        width="160px"
-                                                        key={key}
-                                                        isDefaultDefinition={isEditable}
-                                                        onChangeDefinition={onChangeDefinition}
-                                                        isProfile="true"
-                                                        defaultValue={{ // Check to reset
-                                                            value: selectedSettingDefaultValue && selectedSettingDefaultValue[key].default_value
-                                                        }}
-                                                        styleSize="large"
-                                                    />
-                                                );
-                                            } else if (type === 'checkbox') {
-                                                return (
-                                                    <CheckboxItem
-                                                        calculateTextIndex={calculateTextIndex}
-                                                        settings={definitionForManager?.settings}
-                                                        defaultValue={includes(customConfigs, key)}
-                                                        definitionKey={key}
-                                                        key={key}
-                                                        isOfficialDefinition={isOfficialDefinition}
-                                                        onChangeDefinition={onChangeDefinition}
-                                                    />
-                                                );
-                                            } else {
-                                                return null;
-                                            }
-                                        })}
+                                    <div className={`${managerType === HEAD_CNC && group.name === 'Carving Tool' && 'sm-flex justify-space-between'}`}>
+                                        <div ref={el => fieldsDom.current[index] = el} className={`${managerType === HEAD_CNC && group.name === 'Carving Tool' && 'width-percent-100'}`}>
+                                            { group.fields && group.fields.map((key) => {
+                                                if (type === 'input') {
+                                                    return (
+                                                        <SettingItem
+                                                            settings={definitionForManager?.settings}
+                                                            definitionKey={key}
+                                                            // width={managerType === HEAD_CNC && group.name === 'Carving Tool' ? '120px' : '160px'}
+                                                            key={key}
+                                                            isDefaultDefinition={isEditable}
+                                                            onChangeDefinition={onChangeDefinition}
+                                                            isProfile="true"
+                                                            defaultValue={{ // Check to reset
+                                                                value: selectedSettingDefaultValue && selectedSettingDefaultValue[key].default_value
+                                                            }}
+                                                            styleSize={managerType === HEAD_CNC && group.name === 'Carving Tool' ? 'middle' : 'large'}
+                                                            managerType={managerType}
+                                                            officalDefinition={!!definitionForManager?.isDefault}
+                                                        />
+                                                    );
+                                                } else if (type === 'checkbox') {
+                                                    return (
+                                                        <CheckboxItem
+                                                            calculateTextIndex={calculateTextIndex}
+                                                            settings={definitionForManager?.settings}
+                                                            defaultValue={includes(customConfigs, key)}
+                                                            definitionKey={key}
+                                                            key={key}
+                                                            isOfficialDefinition={isOfficialDefinition}
+                                                            onChangeDefinition={onChangeDefinition}
+                                                        />
+                                                    );
+                                                } else {
+                                                    return null;
+                                                }
+                                            })}
+                                        </div>
+                                        {managerType === HEAD_CNC && group.name === 'Carving Tool' && definitionForManager?.settings?.tool_type?.default_value && (
+                                            <div>
+                                                <img style={{ width: 80, height: 203, marginLeft: 20 }} src={`/resources/images/cnc/tool-type-${definitionForManager?.settings?.tool_type?.default_value}.jpg`} alt="" />
+                                            </div>
+                                        )}
                                     </div>
                                 </>
                             </div>
@@ -142,7 +154,8 @@ ConfigValueBox.propTypes = {
     onChangeDefinition: PropTypes.func.isRequired,
     selectedSettingDefaultValue: PropTypes.object,
     showMiddle: PropTypes.bool,
-    hideMiniTitle: PropTypes.bool
+    hideMiniTitle: PropTypes.bool,
+    managerType: PropTypes.string
 };
 
 export default React.memo(ConfigValueBox);

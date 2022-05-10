@@ -244,8 +244,7 @@ class AttributesParser {
             const value = node.$[key];
             this.parseAttribute(attributes, parentAttributes, key, value, isTextElement);
         });
-        node.$.stroke = '#000000';
-        node.$['stroke-width'] = 1;
+
         if (!node.$.style) {
             node.$.style = OVERRIDE_STYLE;
         } else {
@@ -272,7 +271,7 @@ class AttributesParser {
 
     parseAttribute(attributes, parentAttributes, key, value, isTextElement) {
         if (isTextElement && key === 'font-family') {
-            attributes.fontFamily = value;
+            attributes.fontFamily = value.replace(/['"]+/g, '');
         }
         switch (key) {
             case 'font-size': {
@@ -338,7 +337,7 @@ class AttributesParser {
                     if (kv.length === 2) {
                         const k = kv[0].trim();
                         const v = kv[1].trim();
-                        this.parseAttribute(attributes, parentAttributes, k, v);
+                        this.parseAttribute(attributes, parentAttributes, k, v, isTextElement);
                     }
                 }
                 break;

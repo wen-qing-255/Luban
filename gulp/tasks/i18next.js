@@ -51,13 +51,13 @@ const appConfig = {
 
         func: {
             list: ['i18n._'],
-            extensions: ['.js', '.jsx']
+            extensions: ['.js', '.jsx', '.ts']
         },
 
         trans: {
             component: 'Trans',
             i18nKey: 'i18nKey',
-            extensions: ['.js', '.jsx'],
+            extensions: ['.js', '.jsx', '.ts'],
             fallbackKey: function (ns, value) {
                 return value;
             }
@@ -111,7 +111,11 @@ const curaFields = [
     'material_flow',
     'material_print_temperature',
     'material_print_temperature_layer_0',
+    'material_final_print_temperature',
+    'material_standby_temperature',
     'cool_fan_speed',
+    'cool_fan_speed_0',
+    'cool_fan_full_layer',
     'machine_heated_bed',
     'material_bed_temperature',
     'material_bed_temperature_layer_0',
@@ -153,6 +157,17 @@ const curaFields = [
     'support_angle',
     'support_infill_rate',
     'support_z_distance',
+
+    // 3DP dual
+    'machine_nozzle_size',
+    'dual',
+    'prime_tower_enable',
+    'prime_tower_wipe_enabled',
+    'ooze_shield_enabled',
+    'ooze_shield_angle',
+    'ooze_shield_dist',
+    'switch_extruder_retraction_amount',
+    'switch_extruder_retraction_speeds',
     // Laser
     'path_type',
     'movement_mode',
@@ -165,6 +180,7 @@ const curaFields = [
     'multi_pass_depth',
     'fixed_power',
     // CNC
+    'tool_type',
     'diameter',
     'angle',
     'shaft_diameter',
@@ -172,7 +188,8 @@ const curaFields = [
     'work_speed',
     'plunge_speed',
     'step_down',
-    'step_over'
+    'step_over',
+    'tool_extension_enabled'
 ];
 
 const CURA_CATEGORIES = [

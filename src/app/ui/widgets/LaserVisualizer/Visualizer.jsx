@@ -6,6 +6,7 @@ import PropTypes from 'prop-types';
 import { connect } from 'react-redux';
 import isEqual from 'lodash/isEqual';
 import path from 'path';
+import classNames from 'classnames';
 
 import i18n from '../../../lib/i18n';
 import { humanReadableTime } from '../../../lib/time-utils';
@@ -64,6 +65,8 @@ class Visualizer extends Component {
         isChangedAfterGcodeGenerating: PropTypes.bool.isRequired,
         enableShortcut: PropTypes.bool.isRequired,
         isOverSize: PropTypes.bool,
+        SVGCanvasMode: PropTypes.string.isRequired,
+        SVGCanvasExt: PropTypes.string.isRequired,
 
         // func
         selectAllElements: PropTypes.func.isRequired,
@@ -117,7 +120,10 @@ class Visualizer extends Component {
             rotateElementsStart: PropTypes.func.isRequired,
             rotateElements: PropTypes.func.isRequired,
             rotateElementsFinish: PropTypes.func.isRequired,
-            moveElementsOnKeyDown: PropTypes.func.isRequired
+            moveElementsOnKeyDown: PropTypes.func.isRequired,
+            isPointInSelectArea: PropTypes.func.isRequired,
+            getMouseTargetByCoordinate: PropTypes.func.isRequired,
+            isSelectedAllVisible: PropTypes.func.isRequired
         })
     };
 
@@ -277,8 +283,8 @@ class Visualizer extends Component {
         onUpdateSelectedModelPosition: (position) => {
             this.props.onSetSelectedModelPosition(position);
         },
-        deleteSelectedModel: () => {
-            this.props.removeSelectedModelsByCallback();
+        deleteSelectedModel: (mode) => {
+            this.props.removeSelectedModelsByCallback(mode);
         },
         arrangeAllModels: () => {
             this.props.arrangeAllModels2D();
@@ -310,6 +316,30 @@ class Visualizer extends Component {
             } else {
                 this.actions.onClickToUpload();
             }
+        },
+        onDrawLine: (line, closedLoop) => {
+            this.props.onDrawLine(line, closedLoop);
+        },
+        onDrawDelete: (lines) => {
+            this.props.onDrawDelete(lines);
+        },
+        onDrawTransform: ({ before, after }) => {
+            this.props.onDrawTransform(before, after);
+        },
+        onDrawTransformComplete: ({ elem, before, after }) => {
+            this.props.onDrawTransformComplete(elem, before, after);
+        },
+        onDrawStart: (elem) => {
+            this.props.onDrawStart(elem);
+        },
+        onDrawComplete: (elem) => {
+            this.props.onDrawComplete(elem);
+        },
+        onBoxSelect: (bbox, onlyContainSelect) => {
+            this.props.onBoxSelect(bbox, onlyContainSelect);
+        },
+        setMode: (mode, extShape) => {
+            this.props.setMode(mode, extShape);
         }
     };
 
@@ -339,7 +369,7 @@ class Visualizer extends Component {
     componentWillReceiveProps(nextProps) {
         const { renderingTimestamp, isOverSize } = nextProps;
 
-        if (!isEqual(nextProps.size, this.props.size) || !isEqual(nextProps.materials, this.props.materials)) {
+        if (!isEqual(nextProps.size, this.props.size)) {
             const { size, materials } = nextProps;
             this.printableArea.updateSize(size, materials);
             this.canvas.current.setCamera(new THREE.Vector3(0, 0, VISUALIZER_CAMERA_HEIGHT), new THREE.Vector3());
@@ -354,9 +384,13 @@ class Visualizer extends Component {
             selectedToolPathModelArray.map(model => this.canvas.current.controls.attach(model.meshObject, SELECTEVENT.ADDSELECT));
         }
 
+        // TODO: Occasionally cannot find 'controls', error on finding 'panOffset' of 'undefined'
         if (renderingTimestamp !== this.props.renderingTimestamp) {
             this.canvas.current.renderScene();
             this.canvas.current.setCameraOnTop();
+
+            this.canvas.current.controls.panOffset.add(new THREE.Vector3(this.props.target?.x || 0, this.props.target?.y || 0, 0));
+            this.canvas.current.controls.updateCamera();
         }
 
         if (nextProps.displayedType !== this.props.displayedType) {
@@ -367,7 +401,7 @@ class Visualizer extends Component {
             }
         }
 
-        if (nextProps.coordinateMode !== this.props.coordinateMode) {
+        if (nextProps.coordinateMode !== this.props.coordinateMode || !isEqual(nextProps.materials, this.props.materials)) {
             const { size, materials, coordinateMode } = nextProps;
             this.printableArea = new PrintablePlate(size, materials, coordinateMode);
             this.actions.autoFocus();
@@ -442,6 +476,8 @@ class Visualizer extends Component {
                 >
                     <SVGEditor
                         editable={editable}
+                        SVGCanvasMode={this.props.SVGCanvasMode}
+                        SVGCanvasExt={this.props.SVGCanvasExt}
                         isActive={!this.props.currentModalPath && this.props.pathname.indexOf('laser') > 0 && this.props.enableShortcut}
                         ref={this.svgCanvas}
                         menuDisabledCount={this.props.menuDisabledCount}
@@ -476,7 +512,7 @@ class Visualizer extends Component {
                     />
                 </div>
                 <div
-                    className={styles['canvas-content']}
+                    className={classNames(styles['canvas-content'], styles['canvas-wrapper'])}
                     style={{
                         visibility: (displayedType === DISPLAYED_TYPE_TOOLPATH) ? 'visible' : 'hidden'
                     }}
@@ -493,7 +529,6 @@ class Visualizer extends Component {
                         cameraInitialTarget={new THREE.Vector3(0, 0, 0)}
                         onSelectModels={this.actions.onSelectModels}
                         onModelAfterTransform={noop}
-                        onModelTransform={noop}
                         showContextMenu={this.showContextMenu}
                         scale={this.props.scale}
                         minScale={MIN_LASER_CNC_CANVAS_SCALE}
@@ -667,7 +702,7 @@ const mapStateToProps = (state, ownProps) => {
     const { currentModalPath, menuDisabledCount } = state.appbarMenu;
     const { background, progressStatesManager } = state.laser;
     const { SVGActions, scale, target, materials, page, selectedModelID, modelGroup, svgModelGroup, toolPathGroup, displayedType,
-        isChangedAfterGcodeGenerating, renderingTimestamp, stage, progress, coordinateMode, coordinateSize, enableShortcut, isOverSize } = state.laser;
+        isChangedAfterGcodeGenerating, renderingTimestamp, stage, progress, coordinateMode, coordinateSize, enableShortcut, isOverSize, SVGCanvasMode, SVGCanvasExt } = state.laser;
     const selectedModelArray = modelGroup.getSelectedModelArray();
     const selectedToolPathModelArray = modelGroup.getSelectedToolPathModels();
 
@@ -700,7 +735,9 @@ const mapStateToProps = (state, ownProps) => {
         renderingTimestamp,
         stage,
         progress,
-        isOverSize
+        isOverSize,
+        SVGCanvasMode,
+        SVGCanvasExt
     };
 };
 
@@ -722,7 +759,7 @@ const mapDispatchToProps = (dispatch) => {
         onSetSelectedModelPosition: (position) => dispatch(editorActions.onSetSelectedModelPosition('laser', position)),
         onFlipSelectedModel: (flip) => dispatch(editorActions.onFlipSelectedModel('laser', flip)),
         selectModelInProcess: (intersect, selectEvent) => dispatch(editorActions.selectModelInProcess('laser', intersect, selectEvent)),
-        removeSelectedModelsByCallback: () => dispatch(editorActions.removeSelectedModelsByCallback('laser')),
+        removeSelectedModelsByCallback: (mode) => dispatch(editorActions.removeSelectedModelsByCallback('laser', mode)),
         duplicateSelectedModel: () => dispatch(editorActions.duplicateSelectedModel('laser')),
 
         cut: () => dispatch(editorActions.cut('laser')),
@@ -743,6 +780,15 @@ const mapDispatchToProps = (dispatch) => {
         cutModel: (file, onFailure) => dispatch(editorActions.cutModel('laser', file, onFailure)),
         switchToPage: (page) => dispatch(editorActions.switchToPage('laser', page)),
 
+        onDrawLine: (line, closedLoop) => dispatch(editorActions.drawLine('laser', line, closedLoop)),
+        onDrawDelete: (lines) => dispatch(editorActions.drawDelete('laser', lines)),
+        onDrawTransform: (before, after) => dispatch(editorActions.drawTransform('laser', before, after)),
+        onDrawTransformComplete: (elem, before, after) => dispatch(editorActions.drawTransformComplete('laser', elem, before, after)),
+        onDrawStart: (elem) => dispatch(editorActions.drawStart('laser', elem)),
+        onDrawComplete: (elem) => dispatch(editorActions.drawComplete('laser', elem)),
+        onBoxSelect: (bbox, onlyContainSelect) => dispatch(editorActions.boxSelect('laser', bbox, onlyContainSelect)),
+        setMode: (mode, ext) => dispatch(editorActions.setCanvasMode('laser', mode, ext)),
+
         elementActions: {
             moveElementsStart: (elements) => dispatch(editorActions.moveElementsStart('laser', elements)),
             moveElements: (elements, options) => dispatch(editorActions.moveElements('laser', elements, options)),
@@ -754,7 +800,10 @@ const mapDispatchToProps = (dispatch) => {
             rotateElements: (elements, options) => dispatch(editorActions.rotateElements('laser', elements, options)),
             rotateElementsFinish: (elements, options) => dispatch(editorActions.rotateElementsFinish('laser', elements, options)),
             moveElementsOnKeyDown: (options) => dispatch(editorActions.moveElementsOnKeyDown('laser', null, options)),
-            rotateElementsImmediately: (elements, options) => dispatch(editorActions.rotateElementsImmediately('laser', elements, options))
+            rotateElementsImmediately: (elements, options) => dispatch(editorActions.rotateElementsImmediately('laser', elements, options)),
+            isPointInSelectArea: (x, y) => dispatch(editorActions.isPointInSelectArea('laser', x, y)),
+            getMouseTargetByCoordinate: (x, y) => dispatch(editorActions.getMouseTargetByCoordinate('laser', x, y)),
+            isSelectedAllVisible: () => dispatch(editorActions.isSelectedAllVisible('laser'))
         }
         // onModelTransform: () => dispatch(editorActions.onModelTransform('laser')),
         // onModelAfterTransform: () => dispatch(editorActions.onModelAfterTransform('laser'))

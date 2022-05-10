@@ -1,3 +1,4 @@
+/* eslint-disable import/no-cycle */
 import { cloneDeep } from 'lodash';
 import ModelGroup from '../../models/ModelGroup';
 import i18n from '../../lib/i18n';
@@ -51,12 +52,17 @@ const INITIAL_STATE = {
 
     displayedType: DISPLAYED_TYPE_MODEL,
     toolPathGroup: new ToolPathGroup(initModelGroup, 'cnc'),
-    updatingToolPath: null,
     showToolPath: false,
     showSimulation: false,
     simulationNeedToPreview: true,
 
     SVGActions: new SVGActionsFactory(initModelGroup),
+    SVGCanvasMode: 'select',
+    SVGCanvasExt: {
+        extShape: '',
+        showExtShape: false,
+        elem: null
+    },
 
     isGcodeGenerating: false,
     isChangedAfterGcodeGenerating: true,
@@ -106,7 +112,7 @@ const INITIAL_STATE = {
 
     // check to remove models
     removingModelsWarning: false,
-    removingModelsWarningCallback: () => {},
+    removingModelsWarningCallback: () => { },
     emptyToolPaths: [],
 
     // check not to duplicated create event
@@ -181,6 +187,7 @@ export const actions = {
             definitionsWithSameCategory = toolDefinitions.filter(d => d.category === oldName);
             for (const definition of definitionsWithSameCategory) {
                 definition.category = newName;
+                definition.i18nCategory = '';
                 await definitionManager.updateDefinition(definition);
                 // find the old tool category definition and replace it
                 const isReplacedDefinition = (d) => d.definitionId === definition.definitionId;
@@ -219,13 +226,14 @@ export const actions = {
         }
         const definitionsWithSameCategory = isCreate ? [{
             ...activeToolList,
-            name: 'Default Tool',
+            name: i18n._('key-default_category-Default Tool'),
             settings: toolDefinitions[0]?.settings
         }]
             : state.toolDefinitions.filter(d => d.category === oldCategory);
         for (let i = 0; i < definitionsWithSameCategory.length; i++) {
             const newDefinition = definitionsWithSameCategory[i];
             newDefinition.category = newCategoryName;
+            newDefinition.i18nCategory = '';
             const definitionId = `${newDefinition.definitionId}${timestamp()}`;
             newDefinition.definitionId = definitionId;
             const createdDefinition = await definitionManager.createDefinition(newDefinition);
@@ -241,15 +249,16 @@ export const actions = {
 
     removeToolCategoryDefinition: (category) => async (dispatch, getState) => {
         const state = getState().cnc;
-        const newToolDefinitions = state.toolDefinitions;
-        const definitionsWithSameCategory = newToolDefinitions.filter(d => d.category === category);
+        const toolDefinitions = state.toolDefinitions;
+        const definitionsWithSameCategory = toolDefinitions.filter(d => d.category === category);
         for (let i = 0; i < definitionsWithSameCategory.length; i++) {
             await definitionManager.removeDefinition(definitionsWithSameCategory[i]);
         }
-
+        const newToolDefinitions = toolDefinitions.filter(d => d.category !== category);
         dispatch(editorActions.updateState('cnc', {
-            toolDefinitions: newToolDefinitions.filter(d => d.category !== category)
+            toolDefinitions: [...newToolDefinitions]
         }));
+        return newToolDefinitions;
     },
     removeToolListDefinition: (activeToolList) => async (dispatch, getState) => {
         const state = getState().cnc;
@@ -261,6 +270,7 @@ export const actions = {
         dispatch(editorActions.updateState('cnc', {
             toolDefinitions: [...newToolDefinitions]
         }));
+        return newToolDefinitions;
     },
     getDefaultDefinition: (definitionId) => (dispatch, getState) => {
         const { defaultDefinitions } = getState().cnc;
@@ -271,6 +281,7 @@ export const actions = {
         const { defaultDefinitions } = getState().cnc;
         const defaultDefinition = defaultDefinitions.find(d => d.definitionId === definitionId);
         dispatch(actions.updateToolListDefinition(defaultDefinition));
+        return defaultDefinition;
     },
     updateStlVisualizer: (obj) => (dispatch, getState) => {
         const { stlVisualizer } = getState().cnc;

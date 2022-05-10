@@ -8,7 +8,7 @@ import webpack from 'webpack';
 //
 export function appCopyDevelopment() {
     const files = [
-        'src/app/*.{ico,png}',
+        'src/app/*.{ico,png,html}',
         'src/app/resources/{images,textures}/**/*',
         'src/app/resources/i18n/**/*'
     ];
@@ -37,7 +37,7 @@ export function appCopyProduction() {
 //
 export function appBuildProduction() {
     return new Promise((resolve) => {
-        const webpackConfig = require('../../webpack.config.app.production.js');
+        const webpackConfig = require('../../webpack.config.app.production');
         webpack(webpackConfig, (err, stats) => {
             if (err) {
                 throw new PluginError('app:build-prod', err);

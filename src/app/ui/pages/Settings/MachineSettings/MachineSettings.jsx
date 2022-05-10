@@ -84,25 +84,35 @@ const cncToolHeadOption = [
         label: MACHINE_TOOL_HEADS[STANDARD_CNC_TOOLHEAD_FOR_SM2].label
     }
 ];
-const machineSeriesOptions = [
-    {
-        ...MACHINE_SERIES.ORIGINAL
-    },
-    {
-        ...MACHINE_SERIES.ORIGINAL_LZ
-    },
-    {
-        ...MACHINE_SERIES.A150
-    },
-    {
-        ...MACHINE_SERIES.A250
-    },
-    {
-        ...MACHINE_SERIES.A350
-    }
-];
 
 function MachineSettings() {
+    // TODO
+    const machineSeriesOptions = [
+        {
+            ...MACHINE_SERIES.ORIGINAL,
+            label: i18n._(MACHINE_SERIES.ORIGINAL.label)
+        },
+        {
+            ...MACHINE_SERIES.ORIGINAL_LZ,
+            label: i18n._(MACHINE_SERIES.ORIGINAL_LZ.label)
+        },
+        {
+            ...MACHINE_SERIES.A150,
+            label: i18n._(MACHINE_SERIES.A150.label)
+        },
+        {
+            ...MACHINE_SERIES.A250,
+            label: i18n._(MACHINE_SERIES.A250.label)
+        },
+        {
+            ...MACHINE_SERIES.A350,
+            label: i18n._(MACHINE_SERIES.A350.label)
+        },
+        {
+            ...MACHINE_SERIES.A400,
+            label: i18n._(MACHINE_SERIES.A400.label)
+        }
+    ];
     const dispatch = useDispatch();
     const series = useSelector(state => state?.machine?.series);
     const toolHead = useSelector(state => state?.machine?.toolHead);
@@ -130,7 +140,7 @@ function MachineSettings() {
     const actions = {
         // Machine Model
         onChangeMachineSeries: (option) => {
-            if (option.value === 'A150' || option.value === 'A250' || option.value === 'A350') {
+            if (option.value === 'A150' || option.value === 'A250' || option.value === 'A350' || option.value === 'A400') {
                 setPrintingToolheadSelected(MACHINE_TOOL_HEADS[SINGLE_EXTRUDER_TOOLHEAD_FOR_SM2].value);
                 setLaserToolheadSelected(MACHINE_TOOL_HEADS[LEVEL_ONE_POWER_LASER_FOR_SM2].value);
                 setCncToolheadSelected(MACHINE_TOOL_HEADS[STANDARD_CNC_TOOLHEAD_FOR_SM2].value);
@@ -219,7 +229,6 @@ function MachineSettings() {
             }, state.series));
             const headType = getCurrentHeadType(window.location.href);
             if (headType) {
-                await dispatch(projectActions.exitRecoverService());
                 await dispatch(projectActions.clearSavedEnvironment(headType));
             }
             window.location.href = '/';
@@ -272,6 +281,17 @@ function MachineSettings() {
         });
     }, [series, size, enclosureDoorDetection, zAxisModule, connectionTimeout]);
 
+    let printingOptions, laserOptions, cncOptions;
+    if (state.series === 'Original' || state.series === 'Original Long Z-axis') {
+        printingOptions = printingToolHeadOptionForOriginal;
+        laserOptions = laserToolHeadOptionForOriginal;
+        cncOptions = cncToolHeadOptionForOriginal;
+    } else {
+        printingOptions = printingToolHeadOption;
+        laserOptions = laserToolHeadOption;
+        cncOptions = cncToolHeadOption;
+    }
+
     return (
         <div className={styles['form-container']}>
             <div className="border-bottom-normal padding-bottom-4">
@@ -306,7 +326,7 @@ function MachineSettings() {
                     <div className="main-text-normal margin-bottom-8 margin-top-16">{i18n._('key-App/Settings/MachineSettings-3D Print Toolhead')}</div>
                     <Select
                         value={printingToolheadSelected}
-                        options={(state.series === 'Original' || state.series === 'Original Long Z-axis' ? printingToolHeadOptionForOriginal : printingToolHeadOption).map(item => {
+                        options={printingOptions.map(item => {
                             return {
                                 value: item.value,
                                 label: i18n._(item.label)
@@ -314,14 +334,14 @@ function MachineSettings() {
                         })}
                         onChange={e => actions.handleToolheadChange(e, 'printing')}
                         size="large"
-                        disabled
+                        disabled={printingOptions.length <= 1}
                     />
                 </div>
                 <div className="margin-bottom-16">
                     <div className="main-text-normal margin-bottom-8">{i18n._('key-App/Settings/MachineSettings-Laser Toolhead')}</div>
                     <Select
                         value={laserToolheadSelected}
-                        options={(state.series === 'Original' || state.series === 'Original Long Z-axis' ? laserToolHeadOptionForOriginal : laserToolHeadOption).map(item => {
+                        options={laserOptions.map(item => {
                             return {
                                 value: item.value,
                                 label: i18n._(item.label)
@@ -329,19 +349,20 @@ function MachineSettings() {
                         })}
                         onChange={e => actions.handleToolheadChange(e, 'laser')}
                         size="large"
+                        disabled={laserOptions.length <= 1}
                     />
                 </div>
                 <div className="margin-bottom-16">
                     <div className="main-text-normal margin-bottom-8">{i18n._('key-App/Settings/MachineSettings-CNC Toolhead')}</div>
                     <Select
                         value={cncToolheadSelected}
-                        options={(state.series === 'Original' || state.series === 'Original Long Z-axis' ? cncToolHeadOptionForOriginal : cncToolHeadOption).map(item => ({
+                        options={cncOptions.map(item => ({
                             value: item.value,
                             label: i18n._(item.label)
                         }))}
                         onChange={e => actions.handleToolheadChange(e, 'cnc')}
                         size="large"
-                        disabled
+                        disabled={cncOptions.length <= 1}
                     />
                 </div>
             </div>

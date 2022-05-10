@@ -1,8 +1,10 @@
-import uuid from 'uuid';
+import { v4 as uuid } from 'uuid';
+import { noop } from 'lodash';
 import { createSVGElement, getBBox, toString } from '../element-utils';
 import { NS } from '../lib/namespaces';
 // import SelectorManager from './SelectorManager';
 import OperatorPoints from './OperatorPoints';
+import DrawGroup from './DrawGroup';
 import { getTransformList } from '../element-transform';
 import { recalculateDimensions } from '../element-recalculate';
 import SvgModel from '../../../models/SvgModel';
@@ -11,6 +13,26 @@ class SVGContentGroup {
     svgId = null;
 
     selectedElements = [];
+
+    drawGroup = null;
+
+    onChangeMode = noop;
+
+    onDrawLine = noop;
+
+    onDrawDelete = noop;
+
+    onDrawTransform = noop;
+
+    onDrawTransformComplete = noop;
+
+    onDrawStart = noop;
+
+    onDrawComplete = noop;
+
+    onExitModelEditing = noop;
+
+    preSelectionGroup = null
 
     constructor(options) {
         const { svgContent, scale } = options;
@@ -24,8 +46,12 @@ class SVGContentGroup {
         this.group = document.createElementNS(NS.SVG, 'g');
         this.group.setAttribute('id', 'svg-data');
 
+        this.preSelectionGroup = document.createElementNS(NS.SVG, 'g');
+        this.preSelectionGroup.setAttribute('id', 'svg-pre-selection');
+
         this.svgContent.append(this.backgroundGroup);
         this.svgContent.append(this.group);
+        this.svgContent.append(this.preSelectionGroup);
 
         this.initFilter();
         // this.selectorManager = new SelectorManager({
@@ -37,6 +63,31 @@ class SVGContentGroup {
             scale: this.scale
         });
         this.operatorPoints.showOperator(true);
+
+        this.drawGroup = new DrawGroup(this.group, this.scale);
+
+        this.drawGroup.onDrawLine = (line, closedLoop) => {
+            this.onDrawLine(line, closedLoop);
+        };
+        this.drawGroup.onDrawDelete = (lines) => {
+            this.onDrawDelete(lines);
+        };
+        this.drawGroup.onDrawTransform = ({ before, after }) => {
+            this.onDrawTransform({ before, after });
+        };
+        this.drawGroup.onDrawTransformComplete = ({ elem, before, after }) => {
+            this.onDrawTransformComplete({ elem, before, after });
+        };
+        this.drawGroup.onDrawStart = (elem) => {
+            this.onDrawStart(elem);
+        };
+        this.drawGroup.onDrawComplete = (svg) => {
+            this.onDrawComplete(svg);
+        };
+    }
+
+    exitModelEditing(exitCompletely) {
+        return this.onExitModelEditing(exitCompletely);
     }
 
     // construct filter used in toolPath
@@ -69,7 +120,7 @@ class SVGContentGroup {
 
     // for create new elem
     getNewId() {
-        this.svgId = `id${uuid.v4()}`;
+        this.svgId = `id${uuid()}`;
         return this.svgId;
     }
 
@@ -87,8 +138,14 @@ class SVGContentGroup {
 
     updateScale(scale) {
         this.operatorPoints.updateScale(scale);
+        this.drawGroup.updateScale(scale);
         for (const childNode of this.getChildNodes()) {
             childNode.setAttribute('stroke-width', 1 / scale);
+        }
+        if (this.preSelectionGroup) {
+            for (const childNode of this.preSelectionGroup.childNodes) {
+                childNode.setAttribute('stroke-width', 1 / scale * 20);
+            }
         }
     }
 
@@ -117,7 +174,7 @@ class SVGContentGroup {
     }
 
     findSVGElement(id) {
-        // uuid.v4() may generate id starts with digit, that will cause querySelector fail
+        // uuid() may generate id starts with digit, that will cause querySelector fail
         // https://stackoverflow.com/questions/37270787/uncaught-syntaxerror-failed-to-execute-queryselector-on-document
         return this.svgContent.getElementById(`${id}`);
     }
@@ -145,6 +202,7 @@ class SVGContentGroup {
         this.showSelectorGrips(false);
         for (const elem of elems) {
             this.selectedElements = this.selectedElements.filter(v => v !== elem);
+            this.deletePreseleElement(elem);
             elem.remove();
         }
     }
@@ -153,7 +211,16 @@ class SVGContentGroup {
         if (elem) {
             this.showSelectorGrips(false);
             this.selectedElements = this.selectedElements.filter(v => v !== elem);
+            this.deletePreseleElement(elem);
             elem.remove();
+        }
+    }
+
+    deletePreseleElement(elem) {
+        const id = elem.getAttribute('id');
+        const pathPreSelectionArea = document.querySelector(`[target-id="${id}"]`);
+        if (pathPreSelectionArea) {
+            pathPreSelectionArea.remove();
         }
     }
 
@@ -206,10 +273,20 @@ class SVGContentGroup {
                 this.selectedElements.push(elem);
             }
         }
-        const posAndsize = this.operatorPoints.resizeGrips(this.selectedElements);
+        const hasHideElem = this.selectedElements.some(elem => elem.getAttribute('display') === 'none');
         this.showSelectorGrips(true);
-        // todo
+        const posAndsize = this.operatorPoints.resizeGrips(this.selectedElements);
+
+        if (hasHideElem) {
+            this.showSelectorResizeAndRotateGrips(!hasHideElem);
+        }
         return posAndsize;
+    }
+
+    setSelection(elements) {
+        this.selectedElements = elements;
+        this.resetSelector(elements);
+        this.showSelectorGrips(true);
     }
 
     /**

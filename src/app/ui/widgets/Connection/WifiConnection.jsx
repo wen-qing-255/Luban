@@ -12,6 +12,7 @@ import i18n from '../../../lib/i18n';
 import usePrevious from '../../../lib/hooks/previous';
 import { actions as machineActions } from '../../../flux/machine';
 import {
+    MACHINE_SERIES,
     ABSENT_OBJECT,
     CONNECTION_STATUS_CONNECTED,
     CONNECTION_STATUS_CONNECTING,
@@ -38,7 +39,7 @@ import styles from './index.styl';
 import ModalSmall from '../../components/Modal/ModalSmall';
 import ModalSmallInput from '../../components/Modal/ModalSmallInput';
 import { Server } from '../../../flux/machine/Server';
-import { actions as workspaceActions } from '../../../flux/workspace';
+// import { actions as workspaceActions } from '../../../flux/workspace';
 // import { machineStore } from '../../../store/local-storage';
 
 export const ModuleStatus = ({ moduleName, status }) => {
@@ -60,6 +61,7 @@ function WifiConnection() {
         connectionAuto,
         server,
         savedServerAddress,
+        savedServerToken,
         manualIp,
         // machine status headType,
         workflowStatus, isOpen, isConnected,
@@ -114,22 +116,18 @@ function WifiConnection() {
         },
         openServer: () => {
             dispatch(machineActions.connect.setSelectedServer(serverState));
-            dispatch(machineActions.openServer((err, data, text) => {
-                if (err) {
-                    actions.showWifiError(err, text);
+            if (serverState.address === savedServerAddress) {
+                serverState.setToken(savedServerToken);
+            }
+            serverState.openServer(({ msg, text, code }) => {
+                if (msg) {
+                    actions.showWifiError(msg, text, code);
                 }
                 setserverOpenState(null);
-                if (data?.toolHead && data.toolHead === LEVEL_TWO_POWER_LASER_FOR_SM2) {
-                    dispatch(workspaceActions.updateMachineState({
-                        headType: data.headType,
-                        toolHead: data.toolHead,
-                        series: series
-                    }));
-                }
-            }));
+            });
         },
         closeServer: () => {
-            dispatch(machineActions.closeServer());
+            server.closeServer();
             setSavedServerAddressState('');
         },
         hideWifiConnectionMessage: () => {
@@ -176,10 +174,10 @@ function WifiConnection() {
                 actions.hideWifiConnectionMessage();
             }, 1000);
         },
-        showWifiError: (err, data) => {
+        showWifiError: (msg, text, code) => {
             setConnectionMessage({
-                text: i18n._(data || err.message),
-                title: err.status ? i18n._(`Error ${err.status}`) : i18n._('key-Workspace/Connection-Error'),
+                text: i18n._(text || msg),
+                title: code ? i18n._(`Error ${code}`) : i18n._('key-Workspace/Connection-Error'),
                 img: 'WarningTipsError',
                 iconColor: '#FF4D4F',
                 showCloseButton: true,
@@ -190,7 +188,7 @@ function WifiConnection() {
         },
         onCloseWifiConnectionMessage: () => {
             actions.hideWifiConnectionMessage();
-            actions.closeServer();
+            server.closeServer();
         },
 
         /**
@@ -207,7 +205,11 @@ function WifiConnection() {
                 onCancel: actions.onCloseManualWiFi,
                 onConfirm: (text) => {
                     dispatch(machineActions.connect.setManualIP(text));
-                    const newServer = new Server('Manual', text);
+                    const newServer = new Server({
+                        name: 'Manual',
+                        address: text,
+                        addByUser: true
+                    });
 
                     // Try add new server
                     const _server = dispatch(machineActions.connect.addServer(newServer));
@@ -244,7 +246,6 @@ function WifiConnection() {
         if (selectedServer !== ABSENT_OBJECT) {
             find = _servers.find(v => v.name === selectedServer.name && v.address === selectedServer.address);
         } else {
-            // If no server selected, we select server based on saved server address
             find = _servers.find(v => v.address === savedServerAddress);
         }
 
@@ -256,11 +257,6 @@ function WifiConnection() {
             setServerState(firstServer);
         }
     }
-
-    useEffect(() => {
-        // Discover servers on mounted
-        actions.onRefreshServers();
-    }, []);
 
     useEffect(() => {
         if (isConnected) {
@@ -433,13 +429,13 @@ function WifiConnection() {
                     </div>
                 </div>
             )}
-            {isConnected && (
+            {isConnected && series && (
                 <div className="margin-bottom-16 margin-top-12">
                     <div
                         className={classNames(styles['connection-state'], 'padding-bottom-8', 'border-bottom-dashed-default')}
                     >
-                        <span className="main-text-normal">
-                            {`${serverState?.name} (${series.toUpperCase()})`}
+                        <span className="main-text-normal max-width-304 text-overflow-ellipsis display-inline">
+                            {`${serverState?.name} (${i18n._(MACHINE_SERIES[series.toUpperCase()].label)})`}
                         </span>
                         <span className={styles['connection-state-icon']}>
                             {workflowStatus === WORKFLOW_STATUS_UNKNOWN

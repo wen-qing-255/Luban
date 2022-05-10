@@ -22,7 +22,9 @@ const init = () => (dispatch) => {
 
 const setConnectionType = (connectionType) => (dispatch) => {
     if (!includes([CONNECTION_TYPE_WIFI, CONNECTION_TYPE_SERIAL], connectionType)) return;
-
+    if (connectionType === CONNECTION_TYPE_WIFI) {
+        dispatch(baseActions.updateState({ servers: [] }));
+    }
     dispatch(baseActions.updateState({ connectionType }));
 
     machineStore.set('connection.type', connectionType);
@@ -51,7 +53,12 @@ const setSelectedServer = (server) => (dispatch, getState) => {
     const { servers } = getState().machine;
     const oldServer = getState().machine.server;
     // We can assume that server must be found on server list
-    const find = servers.find(s => s.address === server.address);
+    let find;
+    if (server.address) {
+        find = servers.find(s => s.address === server.address);
+    } else if (server.port) {
+        find = servers.find(s => s.port === server.port);
+    }
     if (find && !isEqual(server, oldServer)) {
     //     // Update server selected
         dispatch(baseActions.updateState({ server: find }));

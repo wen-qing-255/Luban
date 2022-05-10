@@ -1,5 +1,6 @@
+/* eslint-disable import/no-cycle */
 import cloneDeep from 'lodash/cloneDeep';
-import { find } from 'lodash';
+import { find, includes } from 'lodash';
 import pkg from '../../../package.json';
 import {
     HEAD_CNC,
@@ -10,26 +11,30 @@ import {
     PROCESS_MODE_MESH,
     getCurrentHeadType,
     COORDINATE_MODE_CENTER, COORDINATE_MODE_BOTTOM_CENTER, PAGE_EDITOR, DISPLAYED_TYPE_MODEL,
-    MAX_RECENT_FILES_LENGTH
+    MAX_RECENT_FILES_LENGTH,
+    LOAD_MODEL_FROM_OUTER,
+    SINGLE_EXTRUDER_TOOLHEAD_FOR_SM2
 } from '../../constants';
 import api from '../../api';
 import { actions as printingActions } from '../printing';
 import { actions as editorActions } from '../editor';
-// import machineAction from '../machine/action-base';
 import { actions as workspaceActions } from '../workspace';
+import { actions as appGlobalActions } from '../app-global';
 import { bubbleSortByAttribute } from '../../lib/numeric-utils';
 import { UniformToolpathConfig } from '../../lib/uniform-toolpath-config';
-import { checkIsSnapmakerProjectFile, checkIsGCodeFile, checkObjectIsEqual } from '../../lib/check-name';
-
+import { checkIsSnapmakerProjectFile, checkIsGCodeFile } from '../../lib/check-name';
 import { actions as operationHistoryActions } from '../operation-history';
 import { machineStore } from '../../store/local-storage';
+import ThreeModel from '../../models/ThreeModel';
 
 import i18n from '../../lib/i18n';
 import UniApi from '../../lib/uni-api';
+import { logGcodeExport, logModuleVisit } from '../../lib/gaEvent';
 
 const INITIAL_STATE = {
     [HEAD_PRINTING]: {
         findLastEnvironment: false,
+        targetFile: null,
         openedFile: null,
         unSaved: false,
         content: null,
@@ -37,6 +42,7 @@ const INITIAL_STATE = {
     },
     [HEAD_CNC]: {
         findLastEnvironment: false,
+        targetFile: null,
         openedFile: null,
         unSaved: false,
         content: null,
@@ -44,6 +50,7 @@ const INITIAL_STATE = {
     },
     [HEAD_LASER]: {
         findLastEnvironment: false,
+        targetFile: null,
         openedFile: null,
         unSaved: false,
         content: null,
@@ -55,11 +62,6 @@ const INITIAL_STATE = {
     }
 };
 const ACTION_UPDATE_STATE = 'EDITOR_ACTION_UPDATE_STATE';
-const interval = {
-    HEAD_LASER: null,
-    HEAD_CNC: null,
-    HEAD_PRINTING: null
-};
 
 export const actions = {
     updateState: (headType, state) => {
@@ -77,29 +79,18 @@ export const actions = {
             if (!openedFile) {
                 await dispatch(actions.getLastEnvironment(envHeadType));
             }
-
-            const action = await actions.autoSaveEnvironment(envHeadType);
-            interval[envHeadType] && clearInterval(interval[envHeadType]);
-            interval[envHeadType] = setInterval(() => dispatch(action), 1000);
         };
-
         startService(HEAD_LASER);
         startService(HEAD_CNC);
         startService(HEAD_PRINTING);
     },
 
-    exitRecoverService: () => () => {
-        for (const envHeadType of [HEAD_LASER, HEAD_CNC, HEAD_PRINTING]) {
-            interval[envHeadType] && clearInterval(interval[envHeadType]);
-            interval[envHeadType] = null;
-        }
-    },
-
-    autoSaveEnvironment: (headType, force = false) => async (dispatch, getState) => {
+    autoSaveEnvironment: (headType) => async (dispatch, getState) => {
         const editorState = getState()[headType];
-        const { initState, content: lastString } = getState().project[headType];
+        const { initState } = getState().project[headType];
         const models = editorState.modelGroup.getModels();
         if (!models.length && initState) return;
+        if (models.length === 1 && models[0].type === 'primeTower') return;
         const machineState = getState().machine;
         const { size, series, toolHead } = machineState;
         const machineInfo = {};
@@ -107,7 +98,6 @@ export const actions = {
         machineInfo.size = size;
         machineInfo.series = series;
         machineInfo.toolHead = toolHead;
-
         const envObj = { machineInfo, models: [], toolpaths: [] };
         envObj.version = pkg?.version;
         if (headType === HEAD_CNC || headType === HEAD_LASER) {
@@ -116,8 +106,9 @@ export const actions = {
             envObj.coordinateMode = coordinateMode;
             envObj.coordinateSize = coordinateSize;
         } else if (headType === HEAD_PRINTING) {
-            const { defaultMaterialId, defaultQualityId } = editorState;
+            const { defaultMaterialId, defaultMaterialIdRight, defaultQualityId } = editorState;
             envObj.defaultMaterialId = defaultMaterialId;
+            envObj.defaultMaterialIdRight = defaultMaterialIdRight;
             envObj.defaultQualityId = defaultQualityId;
         }
         for (let key = 0; key < models.length; key++) {
@@ -128,11 +119,9 @@ export const actions = {
             const toolPaths = editorState.toolPathGroup.getToolPaths();
             envObj.toolpaths = toolPaths;
         }
-        if (force || !checkObjectIsEqual(JSON.parse(lastString), envObj)) {
-            const content = JSON.stringify(envObj);
-            dispatch(actions.updateState(headType, { content, unSaved: true, initState: false }));
-            await api.saveEnv({ content });
-        }
+        const content = JSON.stringify(envObj);
+        dispatch(actions.updateState(headType, { content, unSaved: true, initState: false }));
+        await api.saveEnv({ content });
     },
 
     getLastEnvironment: (headType) => async (dispatch) => {
@@ -154,27 +143,61 @@ export const actions = {
             console.log(e);
         }
 
-        dispatch(actions.updateState(headType, { findLastEnvironment: false, unSaved: false }));
+        dispatch(actions.updateState(headType, { unSaved: false }));
+    },
+
+    recoverModels: (promiseArray = [], modActions, models, envHeadType) => (dispatch) => {
+        for (let k = 0; k < models.length; k++) {
+            const { headType, originalName, uploadName, modelName, config, sourceType, gcodeConfig,
+                sourceWidth, sourceHeight, mode, transformation, modelID, supportTag, extruderConfig, children, parentModelID } = models[k];
+            const primeTowerTag = includes(originalName, 'prime_tower');
+            // prevent project recovery recorded into operation history
+            if (supportTag) {
+                continue;
+            }
+            if (!children) {
+                // excludeModelById only works for models except group
+                dispatch(operationHistoryActions.excludeModelById(envHeadType, modelID));
+            }
+
+            promiseArray.push(
+                dispatch(modActions.generateModel(headType, {
+                    loadFrom: LOAD_MODEL_FROM_OUTER, originalName, uploadName, modelName, sourceWidth, sourceHeight, mode, sourceType, config, gcodeConfig, transformation, modelID, extruderConfig, isGroup: !!children, parentModelID, children, primeTowerTag
+                }))
+            );
+            if (children && children.length > 0) {
+                dispatch(actions.recoverModels(promiseArray, modActions, children, envHeadType));
+            }
+        }
     },
 
     onRecovery: (envHeadType, envObj, backendRecover = true, shouldSetFileName = true) => async (dispatch, getState) => {
         UniApi.Window.setOpenedFile();
         let { content } = getState().project[envHeadType];
+        const { toolHead: { printingToolhead } } = getState().machine;
         if (!envObj) {
             envObj = JSON.parse(content);
         }
+        if (envObj?.machineInfo?.headType === '3dp') envObj.machineInfo.headType = HEAD_PRINTING;
+        const allModels = envObj?.models;
+        allModels.forEach((model) => {
+            if (model.headType === '3dp') {
+                model.headType = HEAD_PRINTING;
+            }
+        });
         // backup project if needed
         if (backendRecover) {
-            if (envObj?.machineInfo?.headType === '3dp') envObj.machineInfo.headType = HEAD_PRINTING;
-            const allModels = envObj?.models;
-            allModels.forEach((model) => {
-                if (model.headType === '3dp') {
-                    model.headType = HEAD_PRINTING;
-                }
-            });
             UniformToolpathConfig(envObj);
             content = JSON.stringify(envObj);
             await api.recoverEnv({ content });
+        }
+        if (envObj?.machineInfo?.headType === HEAD_PRINTING && printingToolhead === SINGLE_EXTRUDER_TOOLHEAD_FOR_SM2) {
+            allModels.forEach((model) => {
+                model.extruderConfig = {
+                    infill: '0',
+                    shell: '0',
+                };
+            });
         }
         let modActions = null;
         const modState = getState()[envHeadType];
@@ -218,18 +241,9 @@ export const actions = {
                 model.mode = PROCESS_MODE_MESH;
             }
         }
+        const promiseArray = [];
+        dispatch(actions.recoverModels(promiseArray, modActions, models, envHeadType));
 
-        for (let k = 0; k < models.length; k++) {
-            const { headType, originalName, uploadName, config, sourceType, gcodeConfig,
-                sourceWidth, sourceHeight, mode, transformation, modelID, supportTag } = models[k];
-            // prevent project recovery recorded into operation history
-            if (supportTag) {
-                continue;
-            }
-            dispatch(operationHistoryActions.excludeModelById(envHeadType, modelID));
-            await dispatch(modActions.generateModel(headType, originalName, uploadName, sourceWidth, sourceHeight, mode,
-                sourceType, config, gcodeConfig, transformation, modelID));
-        }
         const { toolPathGroup } = modState;
         if (toolPathGroup && toolPathGroup.toolPaths && toolPathGroup.toolPaths.length) {
             toolPathGroup.deleteAllToolPaths();
@@ -255,21 +269,42 @@ export const actions = {
             }
         }
         await dispatch(actions.updateState(envHeadType, { unSaved: true }));
+
+        Promise.all(promiseArray).then(() => {
+            dispatch(actions.afterOpened(envHeadType));
+            if (envHeadType === HEAD_PRINTING) {
+                dispatch(modActions.updateAllModelColors());
+            }
+        }).catch(console.error);
     },
 
-    exportFile: (targetFile, renderGcodeFileName = '') => async () => {
+    exportFile: (targetFile, renderGcodeFileName = null) => async (dispatch, getState) => {
+        const { headType, isRotate } = getState().workspace;
         const tmpFile = `/Tmp/${targetFile}`;
-        await UniApi.File.exportAs(targetFile, tmpFile, renderGcodeFileName);
+        logGcodeExport(headType, 'local', isRotate);
+        await UniApi.File.exportAs(targetFile, tmpFile, renderGcodeFileName, (type, filePath = '') => {
+            dispatch(appGlobalActions.updateSavedModal({
+                showSavedModal: true,
+                savedModalType: type,
+                savedModalFilePath: filePath
+            }));
+        });
     },
 
-    exportConfigFile: (targetFile, subCategory) => async () => {
+    exportConfigFile: (targetFile, subCategory) => async (dispatch) => {
         let configFile;
         if (subCategory) {
             configFile = `/Config/${subCategory}/${targetFile}`;
         } else {
             configFile = `/Config/${targetFile}`;
         }
-        await UniApi.File.exportAs(targetFile, configFile);
+        await UniApi.File.exportAs(targetFile, configFile, null, (type, filePath = '') => {
+            dispatch(appGlobalActions.updateSavedModal({
+                showSavedModal: true,
+                savedModalType: type,
+                savedModalFilePath: filePath
+            }));
+        });
     },
 
     setOpenedFileWithType: (headType, openedFile) => async (dispatch) => {
@@ -278,14 +313,31 @@ export const actions = {
         UniApi.Menu.setItemEnabled('save', !!openedFile);
     },
 
-    saveAsFile: (headType) => async (dispatch) => {
-        const { body: { targetFile } } = await api.packageEnv({ headType });
-        const tmpFile = `/Tmp/${targetFile}`;
-        const openedFile = await UniApi.File.saveAs(targetFile, tmpFile);
-        if (openedFile) {
-            await dispatch(actions.setOpenedFileWithType(headType, openedFile));
+    saveAsFile: (headType) => async (dispatch, getState) => {
+        const { unSaved, openedFile, targetFile } = getState().project[headType];
+        let tmpFile, newTargetFile;
+        if (unSaved || !openedFile) {
+            const { body: { targetFile: insideTargetFile } } = await api.packageEnv({ headType });
+            newTargetFile = insideTargetFile;
+            tmpFile = `/Tmp/${newTargetFile}`;
+            dispatch(actions.updateState(headType, { targetFile: newTargetFile }));
+        } else {
+            const { name } = openedFile;
+            newTargetFile = name;
+            tmpFile = `/Tmp/${targetFile}`;
         }
-        await dispatch(actions.clearSavedEnvironment(headType));
+        UniApi.File.saveAs(newTargetFile, tmpFile, (type, filePath = '', newOpenedFile) => {
+            dispatch(appGlobalActions.updateSavedModal({
+                showSavedModal: true,
+                savedModalType: type,
+                savedModalFilePath: filePath
+            }));
+            dispatch(actions.afterSaved());
+            if (newOpenedFile) {
+                dispatch(actions.setOpenedFileWithType(headType, newOpenedFile));
+            }
+            dispatch(actions.clearSavedEnvironment(headType));
+        });
     },
     save: (headType, dialogOptions = false) => async (dispatch, getState) => {
         // save should return when no model in editor
@@ -337,15 +389,50 @@ export const actions = {
         }
 
         const { body: { targetFile } } = await api.packageEnv({ headType });
+        dispatch(actions.updateState(headType, { targetFile }));
         const tmpFile = `/Tmp/${targetFile}`;
-        UniApi.File.save(openedFile.path, tmpFile);
+        UniApi.File.save(openedFile.path, tmpFile, () => {
+            dispatch(actions.afterSaved());
+        });
         await dispatch(actions.clearSavedEnvironment(headType));
     },
 
-    openProject: (file, history, unReload = false, isGuideTours = false) => async (dispatch) => {
+    afterOpened: (headType) => (dispatch, getState) => {
+        const { modelGroup } = getState().printing;
+        if (headType === HEAD_PRINTING) {
+            // when recovering project, add model to its group
+            modelGroup.groupsChildrenMap.forEach((subModels, group) => {
+                if (subModels.every(id => id instanceof ThreeModel)) {
+                    modelGroup.unselectAllModels();
+
+                    group.meshObject.updateMatrixWorld();
+                    const groupMatrix = group.meshObject.matrixWorld.clone();
+                    group.add(subModels);
+                    modelGroup.groupsChildrenMap.delete(group);
+                    modelGroup.models = [...modelGroup.models, group];
+                    group.meshObject.applyMatrix4(groupMatrix);
+
+                    group.stickToPlate();
+                    group.computeBoundingBox();
+                    const overstepped = modelGroup._checkOverstepped(group);
+                    group.setOversteppedAndSelected(overstepped, group.isSelected);
+                    modelGroup.addModelToSelectedGroup(group);
+                }
+            });
+        }
+    },
+
+    // Note: add progress bar when saving project file
+    afterSaved: () => () => {
+
+    },
+
+    openProject: (file, history, unReload = false, isGuideTours = false) => async (dispatch, getState) => {
         if (checkIsSnapmakerProjectFile(file.name)) {
             const formData = new FormData();
             let shouldSetFileName = true;
+            const { modelGroup: { models } } = getState().printing;
+            const isOnlyPrimeTower = models.length && models?.every(modelItem => modelItem.type === 'primeTower');
             if (!(file instanceof File)) {
                 if (new RegExp(/^\.\//).test(file?.path)) {
                     shouldSetFileName = false;
@@ -381,8 +468,8 @@ export const actions = {
             // End of Compatible with old project file
 
             const oldHeadType = getCurrentHeadType(history?.location?.pathname) || headType;
-            !isGuideTours && await dispatch(actions.save(oldHeadType, {
-                message: i18n._('key-Project/Save-Save the changes you made in the {{headType}} G-code Generator? Your changes will be lost if you don’t save them.', { headType: HEAD_TYPE_ENV_NAME[oldHeadType] })
+            !isGuideTours && !isOnlyPrimeTower && await dispatch(actions.save(oldHeadType, {
+                message: i18n._('key-Project/Save-Save the changes you made in the {{headType}} G-code Generator? Your changes will be lost if you don’t save them.', { headType: i18n._(HEAD_TYPE_ENV_NAME[oldHeadType]) })
             }));
             await dispatch(actions.closeProject(oldHeadType));
             content && dispatch(actions.updateState(headType, { findLastEnvironment: false, content, unSaved: false }));
@@ -412,15 +499,17 @@ export const actions = {
         }
     },
 
-    startProject: (from, to, history, restartGuide = false) => async (dispatch, getState) => {
+    startProject: (from, to, history, restartGuide = false, isRotate = false) => async (dispatch, getState) => {
         const newHeadType = getCurrentHeadType(to);
         const oldHeadType = getCurrentHeadType(from) || newHeadType;
+        const { modelGroup: { models } } = getState().printing;
+        const isOnlyPrimeTower = models.length && models?.every(modelItem => modelItem.type === 'primeTower');
         if (oldHeadType === null) {
             history.push(to);
             return;
         }
-        await dispatch(actions.save(oldHeadType, {
-            message: i18n._('key-Project/Save-Save the changes you made in the {{headType}} G-code Generator? Your changes will be lost if you don’t save them.', { headType: HEAD_TYPE_ENV_NAME[oldHeadType] })
+        !isOnlyPrimeTower && await dispatch(actions.save(oldHeadType, {
+            message: i18n._('key-Project/Save-Save the changes you made in the {{headType}} G-code Generator? Your changes will be lost if you don’t save them.', { headType: i18n._(HEAD_TYPE_ENV_NAME[oldHeadType]) })
         }));
         await dispatch(actions.closeProject(oldHeadType));
 
@@ -437,7 +526,7 @@ export const actions = {
         let isGuideTours = false;
         let shouldShowGuideTours = false;
         const toPath = to.slice(1);
-        const isRotate = getState()[toPath]?.materials?.isRotate;
+        isRotate = restartGuide ? getState()[toPath]?.materials?.isRotate : isRotate;
         if (from === to) {
             const currentGuideTours = machineStore.get('guideTours');
             history.push({
@@ -473,14 +562,16 @@ export const actions = {
         } else {
             isGuideTours = machineStore.get('guideTours')?.guideTours3dp;
         }
+        logModuleVisit(newHeadType, isRotate);
         history.push({
             pathname: to,
             state: {
                 shouldShowJobType: restartGuide ? false : !!isGuideTours,
-                shouldShowGuideTours: to === from ? (!shouldShowGuideTours || restartGuide) : (!isGuideTours || restartGuide)
+                shouldShowGuideTours: to === from ? (!shouldShowGuideTours || restartGuide) : (!isGuideTours || restartGuide),
+                isRotate: isRotate
             }
         });
-
+        dispatch(printingActions.displayModel());
         // clear operation history
         dispatch(operationHistoryActions.clear(newHeadType));
     },

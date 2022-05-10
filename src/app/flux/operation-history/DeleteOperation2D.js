@@ -22,14 +22,13 @@ export default class DeleteOperation2D extends Operation {
 
         const id = model.modelID;
         toolPathGroup.toolPaths.forEach((item) => {
-            const index = item.modelIDs.indexOf(id);
-            if (index > -1) {
+            if (item.modelMap.get(id)) {
                 this.state.toolPaths.push(item);
-                item.modelIDs.splice(index, 1);
+                item.modelMap.delete(id);
             }
         });
         for (const toolPath of this.state.toolPaths) {
-            if (toolPath.modelIDs.length === 0) {
+            if (toolPath.modelMap.size === 0) {
                 toolPathGroup.deleteToolPath(toolPath.id);
             }
         }
@@ -50,19 +49,22 @@ export default class DeleteOperation2D extends Operation {
                 toolPathGroup.toolPaths.push(item);
                 toolPathGroup.toolPathObjects.add(item.object);
             }
-            if (item.modelIDs.indexOf(id) < 0) {
-                item.modelIDs.push(id);
+            if (id) {
+                item.modelMap.set(id, model);
             }
         });
         this.state.toolPaths = [];
-        toolPathGroup._updated();
 
         model.setParent(svgActions.svgContentGroup.group);
+        model.setPreSelection(svgActions.svgContentGroup.preSelectionGroup);
         modelGroup.object.add(model.meshObject);
         model.meshObject.addEventListener('update', modelGroup.onModelUpdate);
         modelGroup.models.push(model);
         modelGroup.models = [...modelGroup.models]; // trigger <ModelItem> component to show the unselected model
         modelGroup.modelChanged();
         svgActions.clearSelection();
+
+        toolPathGroup.addSelectedToolpathColor();
+        toolPathGroup._updated();
     }
 }

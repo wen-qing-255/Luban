@@ -1,10 +1,39 @@
 import { valueOf } from '../lib/contants-utils';
 
+export const DEFAULT_LUBAN_HOST = 'luban://127.0.0.1';
 // Metric and Imperial units
 export const IMPERIAL_UNITS = 'in';
 export const METRIC_UNITS = 'mm';
 
 export const EPSILON = 1e-6;
+export const CONNECTION_OPEN = 'connection:open';
+export const CONNECTION_CLOSE = 'connection:close';
+export const CONNECTION_EXECUTE_GCODE = 'connection:executeGcode';
+export const CONNECTION_START_GCODE = 'connection:startGcode';
+export const CONNECTION_RESUME_GCODE = 'connection:resumeGcode';
+export const CONNECTION_PAUSE_GCODE = 'connection:pauseGcode';
+export const CONNECTION_STOP_GCODE = 'connection:stopGcode';
+export const CONNECTION_HEARTBEAT = 'connection:startHeartbeat';
+export const CONNECTION_MATERIALTHICKNESS = 'connection:materialThickness';
+export const CONNECTION_MATERIALTHICKNESS_ABORT = 'connection:materialThickness_abort';
+export const CONNECTION_GET_GCODEFILE = 'connection:getGcodeFile';
+export const CONNECTION_UPLOAD_FILE = 'connection:uploadFile';
+export const CONNECTION_Z_OFFSET = 'connection:updateZOffset';
+export const CONNECTION_NOZZLE_TEMPERATURE = 'connection:updateNozzleTemperature';
+export const CONNECTION_BED_TEMPERATURE = 'connection:updateBedTemperature';
+export const CONNECTION_LOAD_FILAMENT = 'connection:loadFilament';
+export const CONNECTION_UNLOAD_FILAMENT = 'connection:unloadFilament';
+export const CONNECTION_WORKSPEED_FACTOR = 'connection:updateWorkSpeedFactor';
+export const CONNECTION_LASER_POWER = 'connection:updateLaserPower';
+export const CONNECTION_SWITCH_LASER_POWER = 'connection:switchLaserPower';
+export const CONNECTION_ENCLOSURE_LIGHT = 'connection:setEnclosureLight';
+export const CONNECTION_ENCLOSURE_FAN = 'connection:setEnclosureFan';
+export const CONNECTION_DOOR_DETECTION = 'connection:setDoorDetection';
+export const CONNECTION_FILTER_SWITCH = 'connection:setFilterSwitch';
+export const CONNECTION_FILTER_WORKSPEED = 'connection:setFilterWorkSpeed';
+
+export const SVG_MOVE_MINI_DISTANCE = 1e-4;
+export const MINIMUM_WIDTH_AND_HEIGHT = 0.01;
 
 // Controller
 export const MARLIN = 'Marlin';
@@ -48,6 +77,18 @@ export const STAGE_GENERATED = 4;
 export const PAGE_EDITOR = 'editor';
 export const PAGE_PROCESS = 'process';
 
+// for dual extruder
+export const LEFT_EXTRUDER = 'left';
+export const RIGHT_EXTRUDER = 'right';
+export const LEFT_EXTRUDER_MAP_NUMBER = '0';
+export const RIGHT_EXTRUDER_MAP_NUMBER = '1';
+export const BOTH_EXTRUDER_MAP_NUMBER = '2';
+
+// for transformControl mode
+export const ROTATE_MODE = 'rotate';
+export const SCALE_MODE = 'scale';
+export const TRANSLATE_MODE = 'translate';
+
 // Stages for 3d print
 export const STAGES_3DP = {
     noModel: 10,
@@ -55,29 +96,99 @@ export const STAGES_3DP = {
     gcodeRendered: 12
 };
 // !important: keys in PRINTING_QUALITY_CONFIG_KEYS, PRINTING_QUALITY_CONFIG_GROUP should change togethor
-export const PRINTING_MATERIAL_CONFIG_KEYS = [
+
+export const WHITE_COLOR = '#ffffff';
+export const BLACK_COLOR = '#464646';
+
+export const KEY_DEFAULT_CATEGORY_CUSTOM = 'key-default_category-Custom';
+
+export const GCODE_VISIBILITY_TYPE = {
+    'WALL-INNER': true,
+    'WALL-OUTER': true,
+    SKIN: true,
+    SKIRT: true,
+    SUPPORT: true,
+    FILL: true,
+    TRAVEL: false,
+    UNKNOWN: true,
+    TOOL0: true,
+    TOOL1: true
+};
+
+export const GCODEPREVIEWMODES = [
+    'Ordinary',
+    'SingleLayer',
+    'GrayUnderTheTopFloor'
+];
+
+export const GCODEPREVIEWMODES_ICONS = [
+    'NormalMode',
+    'SingleLayerMode',
+    'GrayedOutMode'
+];
+
+export const PRINTING_MATERIAL_CONFIG_COLORS = [
+    [WHITE_COLOR, BLACK_COLOR],
+    ['#E70008', '#b36100', '#d4cc00', '#35a000', '#00685a', '#006a99', '#003c7c', '#4c2868', '#b3196f', '#767676'],
+    ['#ff5257', '#ff8b00', '#fff500', '#7bf93c', '#00bea6', '#0092d3', '#0053aa', '#753fa0', '#f9239b', '#a6a6a6'],
+    ['#ffd2d3', '#ffca8a', '#fbfb74', '#baff79', '#68d7c9', '#71cdec', '#7eadd8', '#bba4d3', '#ef9fd0', '#cccccc']
+];
+
+export const PRINTING_MATERIAL_CONFIG_KEYS_SINGLE = [
+    // Color
+    'color',
+    // Temperature
     'material_diameter',
-    'material_flow',
     'material_print_temperature',
+    'material_final_print_temperature',
+    'material_standby_temperature',
     'material_print_temperature_layer_0',
     'cool_fan_speed',
     'machine_heated_bed',
     'material_bed_temperature',
     'material_bed_temperature_layer_0',
     // Extrude
-    'material_flow_layer_0'
+    'material_flow',
     // retraction
-    // 'retraction_enable',
-    // 'retract_at_layer_change',
-    // 'retraction_amount',
-    // 'retraction_speed',
-    // 'retraction_hop_enabled',
-    // 'retraction_hop'
+    'retraction_enable',
+    'retract_at_layer_change',
+    'retraction_amount',
+    'retraction_speed',
+    'retraction_hop_enabled',
+    'retraction_hop'
 ];
-export const PRINTING_QUALITY_CONFIG_KEYS = [
+export const PRINTING_MATERIAL_CONFIG_KEYS_DUAL = [
+    // Color
+    'color',
+    // Temperature
+    'material_diameter',
+    'material_print_temperature',
+    'material_final_print_temperature',
+    'material_standby_temperature',
+    'material_print_temperature_layer_0',
+    'cool_fan_speed',
+    'cool_fan_speed_0',
+    'machine_heated_bed',
+    'cool_fan_full_layer',
+    'material_bed_temperature',
+    'material_bed_temperature_layer_0',
+    // Extrude
+    'material_flow',
+    // 'material_flow_layer_0',
+    // retraction
+    'retraction_enable',
+    'retract_at_layer_change',
+    'retraction_amount',
+    'retraction_speed',
+    'retraction_hop_enabled',
+    'retraction_hop',
+    'switch_extruder_retraction_amount'
+];
+export const PRINTING_QUALITY_CONFIG_KEYS_SINGLE = [
     'layer_height',
     'layer_height_0',
     'initial_layer_line_width_factor',
+    'material_flow_layer_0',
     'wall_thickness',
     'top_thickness',
     'bottom_thickness',
@@ -92,12 +203,6 @@ export const PRINTING_QUALITY_CONFIG_KEYS = [
     'speed_topbottom',
     'speed_travel',
     'speed_travel_layer_0',
-    'retraction_enable',
-    'retract_at_layer_change',
-    'retraction_amount',
-    'retraction_speed',
-    'retraction_hop_enabled',
-    'retraction_hop',
     // 'Surface'
     'magic_spiralize',
     'magic_mesh_surface_mode',
@@ -114,15 +219,68 @@ export const PRINTING_QUALITY_CONFIG_KEYS = [
     'support_infill_rate',
     'support_z_distance'
 ];
-export const PRINTING_MATERIAL_CONFIG_GROUP = [
+export const PRINTING_QUALITY_CONFIG_KEYS_DUAL = [
+    'layer_height',
+    'layer_height_0',
+    'initial_layer_line_width_factor',
+    'material_flow_layer_0',
+    'wall_thickness',
+    'top_thickness',
+    'bottom_thickness',
+    'outer_inset_first',
+    'infill_sparse_density',
+    'infill_pattern',
+    // 'speed_print',
+    'speed_print_layer_0',
+    'speed_infill',
+    'speed_wall_0',
+    'speed_wall_x',
+    'speed_topbottom',
+    'speed_travel',
+    'speed_travel_layer_0',
+    // 'Surface'
+    'magic_spiralize',
+    'magic_mesh_surface_mode',
+    // 'HeatedBedAdhesionType'
+    'adhesion_type',
+    'skirt_line_count',
+    'brim_line_count',
+    'raft_margin',
+    // 'Support'
+    'support_enable',
+    'support_type',
+    'support_angle',
+    'support_pattern',
+    'support_infill_rate',
+    'support_z_distance',
+    // 'dual'
+    'prime_tower_enable',
+    'prime_tower_wipe_enabled',
+    'ooze_shield_enabled',
+    'ooze_shield_angle',
+    'ooze_shield_dist'
+    // 'switch_extruder_retraction_amount',
+    // 'switch_extruder_retraction_speeds'
+];
+export const MACHINE_EXTRUDER_X = ['machine_extruder_start_pos_x', 'machine_extruder_end_pos_x'];
+export const MACHINE_EXTRUDER_Y = ['machine_extruder_start_pos_y', 'machine_extruder_end_pos_y'];
+export const PRINTING_MATERIAL_CONFIG_GROUP_SINGLE = [
+    {
+        name: 'Color',
+        fields: [
+            'color'
+        ]
+    },
     {
         name: 'key-printing/material_settings-Temperature',
         fields: [
             'material_diameter',
-            'material_flow',
             'material_print_temperature',
+            'material_final_print_temperature',
+            'material_standby_temperature',
             'material_print_temperature_layer_0',
             'cool_fan_speed',
+            'cool_fan_full_layer',
             'machine_heated_bed',
             'material_bed_temperature',
             'material_bed_temperature_layer_0'
@@ -131,29 +289,74 @@ export const PRINTING_MATERIAL_CONFIG_GROUP = [
     {
         name: 'key-printing/material_settings-Extrusion',
         fields: [
-            // 'material_flow',
-            'material_flow_layer_0'
+            'material_flow',
+            // 'material_flow_layer_0'
+        ]
+    },
+    {
+        name: 'Retract & Z Hop',
+        fields: [
+            'retraction_enable',
+            'retract_at_layer_change',
+            'retraction_amount',
+            'retraction_speed',
+            'retraction_hop_enabled',
+            'retraction_hop'
         ]
     }
-    // {
-    //     name: 'Retract & Z Hop',
-    //     fields: [
-    //         'retraction_enable',
-    //         'retract_at_layer_change',
-    //         'retraction_amount',
-    //         'retraction_speed',
-    //         'retraction_hop_enabled',
-    //         'retraction_hop'
-    //     ]
-    // }
 ];
-export const PRINTING_QUALITY_CONFIG_GROUP = [
+export const PRINTING_MATERIAL_CONFIG_GROUP_DUAL = [
+    {
+        name: 'Color',
+        fields: [
+            'color'
+        ]
+    },
+    {
+        name: 'key-printing/material_settings-Temperature',
+        fields: [
+            'material_diameter',
+            'material_print_temperature',
+            'material_final_print_temperature',
+            'material_standby_temperature',
+            'material_print_temperature_layer_0',
+            'cool_fan_speed',
+            'cool_fan_speed_0',
+            'cool_fan_full_layer',
+            'machine_heated_bed',
+            'material_bed_temperature',
+            'material_bed_temperature_layer_0'
+        ]
+    },
+    {
+        name: 'key-printing/material_settings-Extrusion',
+        fields: [
+            'material_flow',
+            // 'material_flow_layer_0'
+        ]
+    },
+    {
+        name: 'Retract & Z Hop',
+        fields: [
+            'retraction_enable',
+            'retract_at_layer_change',
+            'retraction_amount',
+            'switch_extruder_retraction_amount',
+            'retraction_speed',
+            'switch_extruder_retraction_speeds',
+            'retraction_hop_enabled',
+            'retraction_hop'
+        ]
+    }
+];
+export const PRINTING_QUALITY_CONFIG_GROUP_SINGLE = [
     {
         name: 'Quality',
         fields: [
             'layer_height',
             'layer_height_0',
-            'initial_layer_line_width_factor'
+            'initial_layer_line_width_factor',
+            'material_flow_layer_0'
         ]
     },
     {
@@ -186,14 +389,72 @@ export const PRINTING_QUALITY_CONFIG_GROUP = [
         ]
     },
     {
-        name: 'Retract & Z Hop',
+        name: 'Surface',
         fields: [
-            'retraction_enable',
-            'retract_at_layer_change',
-            'retraction_amount',
-            'retraction_speed',
-            'retraction_hop_enabled',
-            'retraction_hop'
+            'magic_spiralize',
+            'magic_mesh_surface_mode'
+        ]
+    },
+    {
+        name: 'Build Plate Adhesion Type',
+        fields: [
+            'adhesion_type',
+            'skirt_line_count',
+            'brim_line_count',
+            'raft_margin'
+        ]
+    },
+    {
+        name: 'Support',
+        fields: [
+            'support_enable',
+            'support_type',
+            'support_pattern',
+            'support_infill_rate',
+            'support_z_distance',
+            // 'support_xy_distance',
+            // 'support_xy_overrides_z',
+            'support_angle'
+        ]
+    }
+];
+export const PRINTING_QUALITY_CONFIG_GROUP_DUAL = [
+    {
+        name: 'Quality',
+        fields: [
+            'layer_height',
+            'layer_height_0',
+            'initial_layer_line_width_factor',
+            'material_flow_layer_0'
+        ]
+    },
+    {
+        name: 'Shell',
+        fields: [
+            'wall_thickness',
+            'top_thickness',
+            'bottom_thickness',
+            'outer_inset_first'
+        ]
+    },
+    {
+        name: 'Infill',
+        fields: [
+            'infill_sparse_density',
+            'infill_pattern'
+        ]
+    },
+    {
+        name: 'Speed',
+        fields: [
+            // 'speed_print',
+            'speed_print_layer_0',
+            'speed_infill',
+            'speed_wall_0',
+            'speed_wall_x',
+            'speed_topbottom',
+            'speed_travel',
+            'speed_travel_layer_0'
         ]
     },
     {
@@ -224,6 +485,18 @@ export const PRINTING_QUALITY_CONFIG_GROUP = [
             // 'support_xy_overrides_z',
             'support_angle'
         ]
+    },
+    {
+        name: 'Dual Extrusion',
+        fields: [
+            'prime_tower_enable',
+            'prime_tower_wipe_enabled',
+            'ooze_shield_enabled',
+            'ooze_shield_angle',
+            'ooze_shield_dist'
+            // 'switch_extruder_retraction_amount',
+            // 'switch_extruder_retraction_speeds'
+        ]
     }
 ];
 
@@ -249,9 +522,12 @@ export const PRINTING_MANAGER_TYPE_QUALITY = 'quality';
 
 export const DEFAULT_CNC_CONFIG_IDS = [
     'tool.default_CVbit',
-    'tool.default_FEM',
+    'tool.default_FEM1.5',
+    'tool.default_FEM3.175',
     'tool.default_MBEM',
-    'tool.default_SGVbit'
+    'tool.default_SGVbit',
+    'tool.rAcrylic_FEM1.5',
+    'tool.rEpoxy_SGVbit'
 ];
 
 export const DEFAULT_LASER_CONFIG_IDS = [
@@ -303,6 +579,7 @@ export const CNC_TOOL_CONFIG_GROUP = [
     {
         name: 'Carving Tool',
         fields: [
+            'tool_type',
             'diameter',
             'angle',
             'shaft_diameter'
@@ -332,12 +609,12 @@ export const CNC_DEFAULT_GCODE_PARAMETERS_DEFINITION = {
         value: 'allowance'
     },
     'sliceMode': {
-        label: 'Slicing Mode',
+        label: 'Method',
         description: 'Select the slicing mode of the mesh toolpath',
         type: 'enum',
         options: {
-            'rotation': 'Rotation',
-            'linkage': 'Linkage'
+            'rotation': 'key-Cnc/ToolpathParameters-Rotation', // TODO
+            'linkage': 'key-Cnc/ToolpathParameters-Linkage' // TODO
         },
         default_value: 'rotation'
     },
@@ -666,7 +943,7 @@ export const SELECTEVENT = {
 export const MACHINE_SERIES = {
     ORIGINAL: {
         value: 'Original',
-        label: 'Snapmaker Original',
+        label: 'key-Luban/Machine/MachineSeries-Snapmaker Original',
         setting: {
             size: {
                 x: 125,
@@ -683,7 +960,7 @@ export const MACHINE_SERIES = {
     ORIGINAL_LZ: {
         value: 'Original Long Z-axis',
         configPath: 'Original',
-        label: 'Snapmaker Original with Z-axis Extension Module',
+        label: 'key-Luban/Machine/MachineSeries-Snapmaker Original with Z-axis Extension Module',
         setting: {
             size: {
                 x: 125,
@@ -699,7 +976,7 @@ export const MACHINE_SERIES = {
     },
     A150: {
         value: 'A150',
-        label: 'Snapmaker 2.0 A150',
+        label: 'key-Luban/Machine/MachineSeries-Snapmaker 2.0 A150',
         setting: {
             size: {
                 x: 160,
@@ -716,7 +993,7 @@ export const MACHINE_SERIES = {
     },
     A250: {
         value: 'A250',
-        label: 'Snapmaker 2.0 A250',
+        label: 'key-Luban/Machine/MachineSeries-Snapmaker 2.0 A250',
         setting: {
             size: {
                 x: 230,
@@ -734,7 +1011,7 @@ export const MACHINE_SERIES = {
     },
     A350: {
         value: 'A350',
-        label: 'Snapmaker 2.0 A350',
+        label: 'key-Luban/Machine/MachineSeries-Snapmaker 2.0 A350',
         setting: {
             size: {
                 x: 320,
@@ -749,9 +1026,26 @@ export const MACHINE_SERIES = {
         },
         alias: ['SM2-L', 'Snapmaker 2.0 A350']
     },
+    A400: {
+        value: 'A400',
+        label: 'key-Luban/Machine/MachineSeries-Snapmaker 2.0 A400',
+        setting: {
+            size: {
+                x: 400,
+                y: 400,
+                z: 400
+            },
+            laserSize: {
+                x: 410,
+                y: 410,
+                z: 420
+            }
+        },
+        alias: ['SM2-XL', 'Snapmaker 2.0 400']
+    },
     CUSTOM: {
         value: 'Custom',
-        label: 'Custom',
+        label: 'key-Luban/Machine/MachineSeries-Custom',
         setting: {
             size: {
                 x: 125,
@@ -777,6 +1071,9 @@ export const LEVEL_ONE_POWER_LASER_FOR_SM2 = 'levelOneLaserToolheadForSM2';
 export const LEVEL_TWO_POWER_LASER_FOR_SM2 = 'levelTwoLaserToolheadForSM2';
 export const STANDARD_CNC_TOOLHEAD_FOR_ORIGINAL = 'standardCNCToolheadForOriginal';
 export const STANDARD_CNC_TOOLHEAD_FOR_SM2 = 'standardCNCToolheadForSM2';
+
+export const DUAL_EXTRUDER_LIMIT_WIDTH_L = 20;
+export const DUAL_EXTRUDER_LIMIT_WIDTH_R = 20;
 
 export const MACHINE_TOOL_HEADS = {
     [SINGLE_EXTRUDER_TOOLHEAD_FOR_ORIGINAL]: {
@@ -833,11 +1130,14 @@ export const MACHINE_TOOL_HEADS = {
         }
     },
     [SINGLE_EXTRUDER_TOOLHEAD_FOR_SM2]: {
-        platform: [MACHINE_SERIES.A150.value, MACHINE_SERIES.A250.value, MACHINE_SERIES.A350.value],
+        platform: [MACHINE_SERIES.A150.value, MACHINE_SERIES.A250.value, MACHINE_SERIES.A350.value, MACHINE_SERIES.A400.value],
         value: SINGLE_EXTRUDER_TOOLHEAD_FOR_SM2,
         key: 'singleExtruderToolheadForSM2',
         pathname: 'single',
-        // label: SINGLE_EXTRUDER_TOOLHEAD,
+        // label: SINGL
+        //
+        //
+        // E_EXTRUDER_TOOLHEAD,
         label: 'key-App/Settings/MachineSettings-Single Extruder Toolhead',
         // mock offset data
         offset: {
@@ -847,7 +1147,7 @@ export const MACHINE_TOOL_HEADS = {
         }
     },
     [DUAL_EXTRUDER_TOOLHEAD_FOR_SM2]: {
-        platform: [MACHINE_SERIES.A150.value, MACHINE_SERIES.A250.value, MACHINE_SERIES.A350.value],
+        platform: [MACHINE_SERIES.A150.value, MACHINE_SERIES.A250.value, MACHINE_SERIES.A350.value, MACHINE_SERIES.A400.value],
         value: DUAL_EXTRUDER_TOOLHEAD_FOR_SM2,
         pathname: 'dual',
         key: 'dualExtruderToolheadForSM2',
@@ -860,7 +1160,7 @@ export const MACHINE_TOOL_HEADS = {
         }
     },
     [LEVEL_ONE_POWER_LASER_FOR_SM2]: {
-        platform: [MACHINE_SERIES.A150.value, MACHINE_SERIES.A250.value, MACHINE_SERIES.A350.value],
+        platform: [MACHINE_SERIES.A150.value, MACHINE_SERIES.A250.value, MACHINE_SERIES.A350.value, MACHINE_SERIES.A400.value],
         value: LEVEL_ONE_POWER_LASER_FOR_SM2,
         pathname: '1600mw',
         key: 'levelOneLaserToolheadForSM2',
@@ -873,7 +1173,7 @@ export const MACHINE_TOOL_HEADS = {
         }
     },
     [LEVEL_TWO_POWER_LASER_FOR_SM2]: {
-        platform: [MACHINE_SERIES.A150.value, MACHINE_SERIES.A250.value, MACHINE_SERIES.A350.value],
+        platform: [MACHINE_SERIES.A150.value, MACHINE_SERIES.A250.value, MACHINE_SERIES.A350.value, MACHINE_SERIES.A400.value],
         value: LEVEL_TWO_POWER_LASER_FOR_SM2,
         pathname: '10w',
         label: 'key-App/Settings/MachineSettings-10W Laser',
@@ -886,7 +1186,7 @@ export const MACHINE_TOOL_HEADS = {
         }
     },
     [STANDARD_CNC_TOOLHEAD_FOR_SM2]: {
-        platform: [MACHINE_SERIES.A150.value, MACHINE_SERIES.A250.value, MACHINE_SERIES.A350.value],
+        platform: [MACHINE_SERIES.A150.value, MACHINE_SERIES.A250.value, MACHINE_SERIES.A350.value, MACHINE_SERIES.A400.value],
         value: STANDARD_CNC_TOOLHEAD_FOR_SM2,
         key: 'standardCNCToolheadForSM2',
         pathname: 'standard',
@@ -903,26 +1203,26 @@ export const MACHINE_TOOL_HEADS = {
 export const MACHINE_HEAD_TYPE = {
     WORKSPACE: {
         value: 'workspace',
-        label: 'Workspace'
+        label: 'key-machine_selection-Workspace'
     },
     '3DP': {
         value: '3dp',
-        label: '3D Printing',
+        label: 'key-machine_selection-3D Printing',
         alias: ['3DP', '1']
     },
     LASER: {
         value: 'laser',
-        label: 'Laser',
+        label: 'key-machine_selection-Laser',
         alias: ['LASER', 'LASER350', 'LASER1600', '3']
     },
     '10W LASER': {
         value: '10w-laser',
-        label: '10W Laser',
+        label: 'key-machine_selection-10W Laser',
         alias: ['10W LASER', '4']
     },
     CNC: {
         value: 'cnc',
-        label: 'CNC',
+        label: 'key-machine_selection-CNC',
         alias: ['CNC', '2']
     }
 };
@@ -935,9 +1235,9 @@ export const IMAGE_WIFI_WAITING = '/resources/images/connection/ic_WI-FI_64x64.p
 export const IMAGE_WIFI_WARNING = '/resources/images/ic_warning-64x64.png';
 export const IMAGE_EMERGENCY_STOP = '/resources/images/connection/ic_emergency_stop.png';
 export const HEAD_TYPE_ENV_NAME = {
-    'printing': '3D printing',
-    'laser': 'Laser',
-    'cnc': 'CNC'
+    'printing': 'key-machine_selection-3D Printing',
+    'laser': 'key-machine_selection-Laser',
+    'cnc': 'key-machine_selection-CNC'
 };
 export const LASER_MOCK_PLATE_HEIGHT = 6;
 
@@ -988,7 +1288,7 @@ export const DISPLAYED_TYPE_TOOLPATH = 'toolpath';
 
 // SVG Canvas coordinateMode
 export const COORDINATE_MODE_CENTER = {
-    label: 'Center',
+    label: 'key-CncLaser/JobSetup-Center',
     value: 'center',
     setting: {
         sizeMultiplyFactor: {
@@ -998,7 +1298,7 @@ export const COORDINATE_MODE_CENTER = {
     }
 };
 export const COORDINATE_MODE_TOP_RIGHT = {
-    label: 'Top Right',
+    label: 'key-CncLaser/JobSetup-Top Right',
     value: 'top-right',
     setting: {
         sizeMultiplyFactor: {
@@ -1008,7 +1308,7 @@ export const COORDINATE_MODE_TOP_RIGHT = {
     }
 };
 export const COORDINATE_MODE_BOTTOM_RIGHT = {
-    label: 'Bottom Right',
+    label: 'key-CncLaser/JobSetup-Bottom Right',
     value: 'bottom-right',
     setting: {
         sizeMultiplyFactor: {
@@ -1018,7 +1318,7 @@ export const COORDINATE_MODE_BOTTOM_RIGHT = {
     }
 };
 export const COORDINATE_MODE_TOP_LEFT = {
-    label: 'Top Left',
+    label: 'key-CncLaser/JobSetup-Top Left',
     value: 'top-left',
     setting: {
         sizeMultiplyFactor: {
@@ -1028,7 +1328,7 @@ export const COORDINATE_MODE_TOP_LEFT = {
     }
 };
 export const COORDINATE_MODE_BOTTOM_LEFT = {
-    label: 'Bottom Left',
+    label: 'key-CncLaser/JobSetup-Bottom Left',
     value: 'bottom-left',
     setting: {
         sizeMultiplyFactor: {
@@ -1038,7 +1338,7 @@ export const COORDINATE_MODE_BOTTOM_LEFT = {
     }
 };
 export const COORDINATE_MODE_BOTTOM_CENTER = {
-    label: 'Top',
+    label: 'key-CncLaser/JobSetup-Top',
     value: 'bottom-center',
     setting: {
         sizeMultiplyFactor: {
@@ -1114,6 +1414,11 @@ export const INITIAL_TOOL_HEAD_FOR_SM2 = {
 
 
 export const LASER_10W_TAKE_PHOTO_POSITION = {
+    A400: { // TODO: need to test
+        x: 290,
+        y: 210,
+        z: 350
+    },
     A350: {
         x: 232,
         y: 178,
@@ -1129,4 +1434,22 @@ export const LASER_10W_TAKE_PHOTO_POSITION = {
         y: 82,
         z: 150
     }
+};
+
+export const NOZZLE_SIZE_DEFAULT_OPTIONS = [
+    { value: 0.2, label: '0.2' },
+    { value: 0.4, label: '0.4' },
+    { value: 0.6, label: '0.6' }
+];
+
+export const LOAD_MODEL_FROM_INNER = 0;
+export const LOAD_MODEL_FROM_OUTER = 1;
+
+export const longLang = ['de', 'es', 'fr', 'it', 'ru', 'uk', 'ja'];
+
+export const longLangWithType = {
+    'es': [HEAD_LASER, HEAD_CNC],
+    'fr': [HEAD_LASER, HEAD_CNC],
+    'it': [HEAD_LASER, HEAD_CNC],
+    'ru': [HEAD_PRINTING, HEAD_LASER, HEAD_CNC]
 };

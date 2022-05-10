@@ -7,20 +7,16 @@ import { actions as cncActions } from '../../../flux/cnc';
 import { actions as projectActions } from '../../../flux/project';
 import { actions as editorActions } from '../../../flux/editor';
 
-import { getMachineSeriesWithToolhead,
-    CNC_TOOL_CONFIG_GROUP, HEAD_CNC, DEFAULT_CNC_CONFIG_IDS } from '../../../constants';
+import {
+    getMachineSeriesWithToolhead,
+    CNC_TOOL_CONFIG_GROUP, HEAD_CNC, DEFAULT_CNC_CONFIG_IDS
+} from '../../../constants';
 import ProfileManager from '../ProfileManager';
 import i18n from '../../../lib/i18n';
-
-const selectedId = DEFAULT_CNC_CONFIG_IDS[0];
 
 function isOfficialDefinition(activeToolList) {
     return includes(DEFAULT_CNC_CONFIG_IDS,
         activeToolList.definitionId);
-}
-function isDefinitionEditable(activeToolList) {
-    return !(includes(DEFAULT_CNC_CONFIG_IDS,
-        activeToolList.definitionId));
 }
 
 function CncToolManager({ closeToolManager, shouldSaveToolpath = false, saveToolPath, setCurrentToolDefinition }) {
@@ -29,14 +25,13 @@ function CncToolManager({ closeToolManager, shouldSaveToolpath = false, saveTool
     const series = useSelector(state => state?.machine?.series);
     const toolHead = useSelector(state => state?.machine?.toolHead);
     const dispatch = useDispatch();
-
     const actions = {
         closeManager: () => {
             closeToolManager && closeToolManager();
         },
         onChangeFileForManager: (event) => {
             const toolFile = event.target.files[0];
-            dispatch(editorActions.onUploadToolDefinition(HEAD_CNC, toolFile));
+            return dispatch(editorActions.onUploadToolDefinition(HEAD_CNC, toolFile));
         },
         exportConfigFile: (definitionForManager) => {
             const definitionId = definitionForManager.definitionId;
@@ -69,14 +64,12 @@ function CncToolManager({ closeToolManager, shouldSaveToolpath = false, saveTool
         updateCategoryName: async (definition, selectedName) => {
             try {
                 const definitionsWithSameCategory = toolDefinitions.filter(d => d.category === definition.category);
-                for (let i = 0; i < definitionsWithSameCategory.length; i++) {
-                    await dispatch(cncActions.updateToolDefinitionName(
-                        true,
-                        definitionsWithSameCategory[i].definitionId,
-                        definitionsWithSameCategory[i].category,
-                        selectedName,
-                    ));
-                }
+                await dispatch(cncActions.updateToolDefinitionName(
+                    true,
+                    definitionsWithSameCategory[0].definitionId,
+                    definitionsWithSameCategory[0].category,
+                    selectedName,
+                ));
                 return null;
             } catch (e) {
                 return Promise.reject(i18n._('key-Cnc/ToolManager-Failed to rename. Name already exists.'));
@@ -95,16 +88,24 @@ function CncToolManager({ closeToolManager, shouldSaveToolpath = false, saveTool
             return result;
         },
         removeManagerDefinition: async (definition) => {
-            await dispatch(cncActions.removeToolListDefinition(definition));
+            const allDefinitions = await dispatch(cncActions.removeToolListDefinition(definition));
+
+            if (activeToolListDefinition.definitionId === definition.definitionId) {
+                actions.onUpdateDefaultDefinition(allDefinitions[0]);
+            }
         },
-        removeToolCategoryDefinition: (definition) => {
-            dispatch(cncActions.removeToolCategoryDefinition(definition.category));
+        removeCategoryDefinition: async (definition) => {
+            const allDefinitions = await dispatch(cncActions.removeToolCategoryDefinition(definition.category));
+
+            if (activeToolListDefinition.category === definition.category) {
+                actions.onUpdateDefaultDefinition(allDefinitions[0]);
+            }
         },
         getDefaultDefinition: (definitionId) => {
             return dispatch(cncActions.getDefaultDefinition(definitionId));
         },
         resetDefinitionById: (definitionId) => {
-            dispatch(cncActions.resetDefinitionById(definitionId));
+            return dispatch(cncActions.resetDefinitionById(definitionId));
         }
     };
     const optionConfigGroup = CNC_TOOL_CONFIG_GROUP;
@@ -113,15 +114,12 @@ function CncToolManager({ closeToolManager, shouldSaveToolpath = false, saveTool
     return (
         <ProfileManager
             outsideActions={actions}
-            activeDefinition={activeToolListDefinition}
-            isDefinitionEditable={isDefinitionEditable}
             isOfficialDefinition={isOfficialDefinition}
             optionConfigGroup={optionConfigGroup}
             allDefinitions={allDefinitions}
-            disableCategory={false}
             managerTitle="key-Cnc/ToolManger-Tool Settings"
-            selectedId={selectedId}
-            headType={HEAD_CNC}
+            activeDefinitionID={activeToolListDefinition.definitionId}
+            managerType={HEAD_CNC}
         />
     );
 }

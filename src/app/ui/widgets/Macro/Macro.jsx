@@ -8,34 +8,27 @@ import SvgIcon from '../../components/SvgIcon';
 import {
     MODAL_RUN_MACRO,
     MODAL_EDIT_MACRO,
-    WORKFLOW_STATE_IDLE, PROTOCOL_SCREEN
+    WORKFLOW_STATE_IDLE
 } from '../../../constants';
 import api from '../../../api';
 // import { Button } from '../../components/Buttons';
 // import Space from '../../components/Space';
-import { limitStringLength } from '../../../lib/normalize-range';
 import i18n from '../../../lib/i18n';
 import { actions as machineActions } from '../../../flux/machine';
-import { actions as developToolsActions } from '../../../flux/develop-tools';
 
 import styles from './index.styl';
 
 const STATUS_IDLE = 'idle';
 
-function Macro({ widgetId, updateModal, openModal, macros }) {
+function Macro({ updateModal, openModal, macros }) {
     const { workflowState, workflowStatus, isConnected } = useSelector(state => state.machine);
-    const { dataSource } = useSelector(state => state.widget.widgets[widgetId]);
     const [macrosState, setMacrosState] = useState([]);
     const dispatch = useDispatch();
 
     const actions = {
         executeGcode: (gcode) => {
             gcode = gcode.trim();
-            if (dataSource === PROTOCOL_SCREEN) {
-                dispatch(developToolsActions.executeGcode(gcode));
-            } else {
-                dispatch(machineActions.executeGcode(gcode));
-            }
+            dispatch(machineActions.executeGcode(gcode));
         },
         runMacro: (macro) => {
             api.macros.read(macro.id)
@@ -99,6 +92,7 @@ function Macro({ widgetId, updateModal, openModal, macros }) {
                     )}
                 >
                     <TipTrigger
+                        className={classNames('sm-flex')}
                         key={macro.id}
                         title={i18n._('key-Workspace/Macro-Macro')}
                         content={macro.name}
@@ -112,7 +106,7 @@ function Macro({ widgetId, updateModal, openModal, macros }) {
                                 actions.runMacro(macro);
                             }}
                         />
-                        {limitStringLength(macro.name, 30)}
+                        <span className="text-overflow-ellipsis">{macro.name}</span>
                     </TipTrigger>
                     <SvgIcon
                         name="Edit"
@@ -129,7 +123,6 @@ Macro.propTypes = {
     macros: PropTypes.array,
     updateModal: PropTypes.func.isRequired,
     openModal: PropTypes.func.isRequired,
-    widgetId: PropTypes.string.isRequired
     // widgetActions: PropTypes.object.isRequired
 };
 

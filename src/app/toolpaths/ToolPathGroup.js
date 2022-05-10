@@ -2,9 +2,10 @@ import * as THREE from 'three';
 import ToolPath from './ToolPath';
 import { createToolPathNameByType, getModelsByToolPathType, getToolPathType, SUCCESS } from './utils';
 import { generateModelDefaultConfigs } from '../models/ModelInfoUtils';
-import { DATA_PREFIX, HEAD_LASER } from '../constants';
+import { DATA_PREFIX, HEAD_LASER, DEFAULT_LUBAN_HOST } from '../constants';
 import { ViewPathRenderer } from '../lib/renderer/ViewPathRenderer';
 import { MATERIAL_UNSELECTED, MATERIAL_SELECTED } from '../workers/ShaderMaterial/ToolpathRendererMeterial';
+import ThreeModel from '../models/ThreeModel';
 
 class ToolPathGroup {
     toolPaths = [];
@@ -81,15 +82,6 @@ class ToolPathGroup {
         this.simulationObject && (this.simulationObject.visible = show);
     }
 
-    async onGenerateToolPath(taskResult, renderResult) {
-        const toolPath = this.toolPaths.find(v => v.id === taskResult.taskId);
-
-        if (toolPath) {
-            await toolPath.onGenerateToolPath(taskResult, renderResult, () => { this._updated(); });
-            this.addSelectedToolpathColor(true);
-            this._updated();
-        }
-    }
 
     setUpdatedCallBack(updatedCallback) {
         this.updatedCallback = updatedCallback;
@@ -184,10 +176,11 @@ class ToolPathGroup {
         this._updated();
         const toolPathInfo = new ToolPath({
             name: createToolPathNameByType(this.count, type, this.headType),
-            baseName: models[0].uploadName,
+            baseName: models[0] instanceof ThreeModel ? models[0].uploadName : models[0].resource.originalFile.name,
+            modelMode: models[0].mode,
             headType: this.headType,
             type,
-            modelIDs: this.modelGroup.selectedModelIDArray,
+            visibleModelIDs: this.modelGroup.selectedModelIDArray,
             modelGroup: this.modelGroup,
             gcodeConfig,
             materials
@@ -208,10 +201,10 @@ class ToolPathGroup {
             this._updated();
             const toolPathInfo = new ToolPath({
                 name: createToolPathNameByType(this.count, type, this.headType),
-                baseName: modelsWithSameType[0].uploadName,
+                baseName: modelsWithSameType[0] instanceof ThreeModel ? modelsWithSameType[0].uploadName : modelsWithSameType[0].resource.originalFile.name,
                 headType: this.headType,
                 type,
-                modelIDs: toolPathModelIDs,
+                visibleModelIDs: toolPathModelIDs,
                 modelGroup: this.modelGroup,
                 gcodeConfig,
                 toolParams,
@@ -239,6 +232,7 @@ class ToolPathGroup {
         if (shouldCommitGenerate) {
             toolPath.commitGenerateToolPath();
         }
+        return toolPath;
     }
 
     addSelectedToolpathColor(withoutSelection = false) {
@@ -249,8 +243,8 @@ class ToolPathGroup {
         });
         this.selectedToolPathArray.forEach((id) => {
             const selectedToolpath = this._getToolPath(id);
-            if (selectedToolpath && selectedToolpath.modelIDs) {
-                for (const modelId of selectedToolpath?.modelIDs) {
+            if (selectedToolpath && selectedToolpath.visibleModelIDs) {
+                for (const modelId of selectedToolpath?.visibleModelIDs) {
                     const model = modelGroup.getModel(modelId);
                     model && model.updateIsToolPathSelect(true);
                 }
@@ -391,6 +385,18 @@ class ToolPathGroup {
         return res;
     }
 
+    commitToolPathPromise(toolPathId) {
+        return new Promise(async (resolve) => {
+            let res = false;
+            const toolPath = this._getToolPath(toolPathId);
+            if (toolPath) {
+                res = toolPath.commitGenerateToolPath();
+            }
+            this._updated();
+            resolve(res);
+        });
+    }
+
     updateToolPath(toolPathId, newState, options) {
         const toolPath = this._getToolPath(toolPathId);
         if (toolPath) {
@@ -400,6 +406,7 @@ class ToolPathGroup {
         }
 
         this._updated();
+        return toolPath;
     }
 
     getThumbnailObject() {
@@ -437,7 +444,7 @@ class ToolPathGroup {
         this.materialsObject = null;
         if (materials.isRotate) {
             const geometry = new THREE.CylinderGeometry(materials.diameter / 2 - 0.1, materials.diameter / 2 - 0.1, materials.length, 32);
-            const texture = new THREE.TextureLoader().load('../resources/images/wood.png');
+            const texture = new THREE.TextureLoader().load(`${DEFAULT_LUBAN_HOST}/resources/images/wood.png`);
             const material = new THREE.MeshPhongMaterial(
                 {
                     color: '#ffffff',

@@ -6,7 +6,7 @@ import classNames from 'classnames';
 import _ from 'lodash';
 import modal from '../../../lib/modal';
 import styles from './styles.styl';
-import { HEAD_CNC, HEAD_LASER } from '../../../constants';
+import { HEAD_CNC, HEAD_LASER, PROCESS_MODE_VECTOR, LEVEL_ONE_POWER_LASER_FOR_SM2, LEVEL_TWO_POWER_LASER_FOR_SM2 } from '../../../constants';
 import i18n from '../../../lib/i18n';
 import { actions as editorActions } from '../../../flux/editor';
 import Modal from '../../components/Modal';
@@ -15,12 +15,35 @@ import CncParameters from './cnc/CncParameters';
 import { toHump } from '../../../../shared/lib/utils';
 import LaserParameters from './laser/LaserParameters';
 
+function getDefaultDefinition(headType, laserToolHead, modelMode, toolDefinitions) {
+    let res;
+    if (headType === HEAD_LASER) {
+        if (laserToolHead === LEVEL_ONE_POWER_LASER_FOR_SM2) {
+            if (modelMode === PROCESS_MODE_VECTOR) {
+                res = toolDefinitions.find(d => d?.definitionId === 'basswood.cutting_1.5mm');
+            } else {
+                res = toolDefinitions.find(d => d?.definitionId === 'basswood.dot_filled_engraving');
+            }
+        } else if (laserToolHead === LEVEL_TWO_POWER_LASER_FOR_SM2) {
+            if (modelMode === PROCESS_MODE_VECTOR) {
+                res = toolDefinitions.find(d => d?.definitionId === 'basswood.cutting_3mm');
+            } else {
+                res = toolDefinitions.find(d => d?.definitionId === 'basswood.dot_filled_engraving');
+            }
+        }
+    }
+    if (!res) {
+        res = toolDefinitions[0];
+    }
+    return res;
+}
+
 function ToolPathConfigurations({ toolpath, onClose, headType }) {
     const toolDefinitions = useSelector(state => state[headType]?.toolDefinitions, shallowEqual);
-
+    const laserToolHead = useSelector(state => state?.machine?.toolHead?.laserToolhead, shallowEqual);
     const dispatch = useDispatch();
 
-    const [currentToolDefinition, setCurrentToolDefinition] = useState(toolDefinitions[0]);
+    const [currentToolDefinition, setCurrentToolDefinition] = useState(getDefaultDefinition(headType, laserToolHead, toolpath?.modelMode, toolDefinitions));
 
     /**
      *
@@ -50,6 +73,8 @@ function ToolPathConfigurations({ toolpath, onClose, headType }) {
                 if (newSettings.work_speed) newSettings.work_speed.default_value = gcodeConfig?.workSpeed;
                 if (newSettings.step_down) newSettings.step_down.default_value = gcodeConfig?.stepDown;
                 if (newSettings.step_over) newSettings.step_over.default_value = gcodeConfig?.stepOver;
+                if (newSettings.tool_type) newSettings.tool_type.default_value = gcodeConfig?.toolType;
+                if (newSettings.tool_extension_enabled) newSettings.tool_extension_enabled.default_value = gcodeConfig?.toolExtensionEnabled;
             }
             if (headType === HEAD_LASER) {
                 if (newSettings.path_type) newSettings.path_type.default_value = gcodeConfig?.pathType;
@@ -85,8 +110,8 @@ function ToolPathConfigurations({ toolpath, onClose, headType }) {
                 if (key === 'movement_mode' && value === 'greyscale-dot') {
                     newDefinition.settings.dwell_time.default_value = 5;
                     newDefinition.settings.fill_interval.default_value = 0.14;
-                    newDefinition.settings.jog_speed.default_value = 2500;
-                    newDefinition.settings.work_speed.default_value = 2500;
+                    newDefinition.settings.jog_speed.default_value = 3000;
+                    // newDefinition.settings.work_speed.default_value = 2500;
                     newDefinition.settings.fixed_power.default_value = 60;
                 }
                 if (key === 'movement_mode' && value === 'greyscale-line') {
@@ -111,6 +136,7 @@ function ToolPathConfigurations({ toolpath, onClose, headType }) {
                     newDefinition.settings.multi_passes.default_value = 2;
                     newDefinition.settings.multi_pass_depth.default_value = 0.6;
                     newDefinition.settings.fixed_power.default_value = 100;
+                    newDefinition.settings.movement_mode.default_value = 'greyscale-line';
                 }
 
                 // Fiexd Power Enabled
@@ -159,10 +185,11 @@ function ToolPathConfigurations({ toolpath, onClose, headType }) {
                     for (const key of Object.keys(currentToolDefinition.settings)) {
                         gcodeConfig[toHump(key)] = currentToolDefinition.settings[key].default_value;
                     }
-                    // TODO
                     if (gcodeConfig.pathType === 'fill') {
                         gcodeConfig.multiPassEnabled = false;
                         gcodeConfig.multiPasses = 1;
+                    } else {
+                        gcodeConfig.multiPassEnabled = true;
                     }
                 }
             }
@@ -265,6 +292,7 @@ function ToolPathConfigurations({ toolpath, onClose, headType }) {
                             updateToolConfig={actions.updateToolConfig}
                             setCurrentValueAsProfile={actions.setCurrentValueAsProfile}
                             updateGcodeConfig={actions.updateGcodeConfig}
+                            isModel
                         />
                     )}
                     {headType === HEAD_LASER && (
@@ -278,6 +306,7 @@ function ToolPathConfigurations({ toolpath, onClose, headType }) {
                             updateToolConfig={actions.updateToolConfig}
                             setCurrentValueAsProfile={actions.setCurrentValueAsProfile}
                             updateGcodeConfig={actions.updateGcodeConfig}
+                            isModel
                         />
                     )}
                 </Modal.Body>

@@ -1,9 +1,9 @@
-import uuid from 'uuid';
+import { v4 as uuid } from 'uuid';
 import { includes } from 'lodash';
 import * as THREE from 'three';
-import { controller } from '../lib/controller';
 import { FAILED, getToolPathType, IDLE, RUNNING, SUCCESS, WARNING } from './utils';
 import { MATERIAL_SELECTED, MATERIAL_UNSELECTED } from '../workers/ShaderMaterial/ToolpathRendererMeterial';
+import { MINIMUM_WIDTH_AND_HEIGHT } from '../constants';
 
 class ToolPath {
     id;
@@ -25,7 +25,7 @@ class ToolPath {
     // Threejs Obj
     object = new THREE.Group();
 
-    modelIDs = [];
+    visibleModelIDs = [];
 
     // { modelID, meshObj, toolPathFile, status}
     modelMap = new Map();
@@ -41,18 +41,20 @@ class ToolPath {
     modelGroup;
 
     constructor(options) {
-        const { id, name, baseName, headType, type, useLegacyEngine = false, modelIDs, gcodeConfig, toolParams = {}, materials = {}, modelGroup } = options;
+        const { id, name, baseName, headType, type, useLegacyEngine = false, modelMode,
+            visibleModelIDs, modelIDs, gcodeConfig, toolParams = {}, materials = {}, modelGroup } = options;
 
-        this.id = id || uuid.v4();
+        this.id = id || uuid();
         this.name = name;
         this.baseName = baseName;
         this.headType = headType;
+        this.modelMode = modelMode;
         this.type = type;
         this.status = IDLE;
         this.useLegacyEngine = useLegacyEngine;
-        this.modelIDs = modelIDs.map(v => v);
+        this.visibleModelIDs = (visibleModelIDs || modelIDs).map(v => v);
 
-        for (const modelID of this.modelIDs) {
+        for (const modelID of this.visibleModelIDs) {
             this.modelMap.set(modelID, {
                 meshObj: null,
                 status: IDLE,
@@ -69,15 +71,12 @@ class ToolPath {
     }
 
     getState() {
-        let modelIDs = [];
-        let toolPathFiles = [];
-        const modelsInModelIDs = this.modelGroup.models.filter(model => {
-            return this.modelIDs.includes(model.modelID) && model.visible === true;
+        this.visibleModelIDs = this.modelGroup.models.filter(model => {
+            return this.modelMap.has(model.modelID) && model.visible === true;
+        }).map(model => {
+            return model.modelID;
         });
-        if (modelsInModelIDs) {
-            modelIDs = [...modelsInModelIDs.map(model => model.modelID)];
-            toolPathFiles = [...modelIDs.map(v => this.modelMap.get(v)?.toolPathFile)];
-        }
+
         return {
             id: this.id,
             headType: this.headType,
@@ -90,9 +89,10 @@ class ToolPath {
             visible: this.visible,
             deleteModel: this.deleteModel,
             modelMap: this.modelMap,
+            modelMode: this.modelMode,
             // object: this.object,
-            modelIDs,
-            toolPathFiles,
+            visibleModelIDs: this.visibleModelIDs,
+            toolPathFiles: this.visibleModelIDs.map(v => this.modelMap.get(v)?.toolPathFile),
             gcodeConfig: {
                 ...this.gcodeConfig
             },
@@ -114,22 +114,21 @@ class ToolPath {
     }
 
     hasVisibleModels() {
-        return this.getState(true).modelIDs.length > 0;
+        return this.getState().visibleModelIDs.length > 0;
     }
 
     updateState(toolPath) {
         const {
             name = this.name, check = this.check, visible = this.visible, useLegacyEngine = this.useLegacyEngine, gcodeConfig = this.gcodeConfig,
-            toolParams = this.toolParams, materials = this.materials, modelIDs = this.modelIDs
+            toolParams = this.toolParams, materials = this.materials, visibleModelIDs = this.visibleModelIDs
         } = toolPath;
-
         this.name = name;
         this.check = check;
         this.visible = visible;
         this.useLegacyEngine = useLegacyEngine;
         this.object.visible = visible;
 
-        this.modelIDs = modelIDs;
+        this.visibleModelIDs = visibleModelIDs;
         this.gcodeConfig = {
             ...gcodeConfig
         };
@@ -143,26 +142,22 @@ class ToolPath {
         this.checkoutToolPathStatus();
     }
 
-    _getToolPathFiles() {
-        return this.modelIDs.map(v => this.modelMap.get(v).toolPathFile);
-    }
-
     _getModels() {
         const models = this.modelGroup.getModels();
         return models.filter(model => {
-            return includes(this.modelIDs, model.modelID) && model.visible;
+            return includes(this.visibleModelIDs, model.modelID) && model.visible;
         });
     }
 
     deleteModel(modelId) {
-        this.modelIDs = this.modelIDs.filter(v => v !== modelId);
+        this.visibleModelIDs = this.visibleModelIDs.filter(v => v !== modelId);
         const modelObj = this.modelMap.get(modelId);
-        modelObj.meshObj && this.object.remove(modelObj.meshObj);
+        modelObj.meshObj && this.object && this.object.remove(modelObj.meshObj);
         this.modelMap.delete(modelId);
     }
 
     /**
-     * Commit generate toolpath task to server
+     * Generate toolpath task to server, need to call `commitToolPathTaskArray`
      */
     commitGenerateToolPath() {
         if (this.status === FAILED) {
@@ -177,9 +172,9 @@ class ToolPath {
 
         const taskInfos = this.getSelectModelsAndToolPathInfo();
 
-        // if (taskInfos.length !== this.modelIDs.length) {
+        // if (taskInfos.length !== this.visibleModelIDs.length) {
         //     // const newIds = taskInfos.map(v => v.modelID);
-        //     // const filterIds = this.modelIDs.filter(v => !newIds.includes(v)) || [];
+        //     // const filterIds = this.visibleModelIDs.filter(v => !newIds.includes(v)) || [];
         //     // for (const filterId of filterIds) {
         //     //     this.deleteModel(filterId);
         //     // }
@@ -205,10 +200,8 @@ class ToolPath {
             data: data
         };
 
-        controller.commitToolPathTask(task);
-
         this.checkoutStatus();
-        return true;
+        return task;
     }
 
     _getModelTaskInfos() {
@@ -216,6 +209,12 @@ class ToolPath {
         const modelInfos = selectModels
             .map(v => v.getTaskInfo())
             .map(v => {
+                if (!v.transformation.width) {
+                    v.transformation.width = MINIMUM_WIDTH_AND_HEIGHT;
+                }
+                if (!v.transformation.height) {
+                    v.transformation.height = MINIMUM_WIDTH_AND_HEIGHT;
+                }
                 return {
                     visible: v.visible,
                     modelID: v.modelID,
@@ -276,7 +275,6 @@ class ToolPath {
 
             const oldMeshObj = modelMapResult.meshObj;
             oldMeshObj && this.object.remove(oldMeshObj);
-
             const toolPathObj3D = this.renderToolpathObj(renderResult);
 
             modelMapResult.meshObj = toolPathObj3D;
@@ -307,7 +305,7 @@ class ToolPath {
 
     checkoutStatus() {
         const values = [];
-        for (const visibleModelID of this.getState(true).modelIDs) {
+        for (const visibleModelID of this.getState().visibleModelIDs) {
             values.push(this.modelMap.get(visibleModelID));
         }
         if (values.find(v => v.status === RUNNING)) {
@@ -330,7 +328,7 @@ class ToolPath {
             this.lastConfigJson = lastConfigJson;
         }
 
-        if (taskInfos.length !== this.modelIDs.length) {
+        if (taskInfos.length !== this.visibleModelIDs.length) {
             this.status = WARNING;
         }
 

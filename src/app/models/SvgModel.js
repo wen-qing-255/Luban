@@ -1,18 +1,20 @@
-import uuid from 'uuid';
+import { v4 as uuid } from 'uuid';
 import * as THREE from 'three';
 import Canvg from 'canvg';
-import { coordGmSvgToModel } from '../ui/SVGEditor/element-utils';
+import svgPath from 'svgpath';
+import { cloneDeep } from 'lodash';
+import { coordGmSvgToModel, createSVGElement } from '../ui/SVGEditor/element-utils';
 
 import { NS } from '../ui/SVGEditor/lib/namespaces';
-import { DATA_PREFIX } from '../constants';
 
 
 // import ThreeDxfLoader from '../lib/threejs/ThreeDxfLoader';
 
 import api from '../api';
 import { checkIsImageSuffix } from '../../shared/lib/utils';
-
 import BaseModel from './BaseModel';
+import Resource from './Resource';
+import { SVG_MOVE_MINI_DISTANCE } from '../constants';
 // import { DEFAULT_FILL_COLOR } from '../ui/SVGEditor/constants';
 
 const EVENTS = {
@@ -179,11 +181,29 @@ class SvgModel extends BaseModel {
 
     modeConfigs = {};
 
+    resource = new Resource();
+
+    pathPreSelectionArea = null;
+
+    vertexPoints = []
+
     constructor(modelInfo, modelGroup) {
         super(modelInfo, modelGroup);
         const { elem, size } = modelInfo;
         this.elem = elem;
         this.size = size;
+
+        this.resource.setOriginalFile(
+            // modelInfo.originalName,
+            modelInfo.uploadName,
+            modelInfo.sourceWidth,
+            modelInfo.sourceHeight
+        );
+        this.resource.setProcessedFile(
+            modelInfo.processImageName,
+            modelInfo.transformation.width,
+            modelInfo.transformation.height
+        );
 
         this.isToolPathSelect = false;
 
@@ -197,6 +217,7 @@ class SvgModel extends BaseModel {
         this.processMode(modelInfo.mode, modelInfo.config);
         // use model info to refresh element
         this.refresh();
+        this.generatePathPreSelectionArea();
         // trigger update source, should add parmas to togger this func
         this.onTransform();
     }
@@ -249,6 +270,13 @@ class SvgModel extends BaseModel {
         this.appendToParent();
     }
 
+    setPreSelection(parent) {
+        if (this.pathPreSelectionArea) {
+            this.pathPreSelectionArea.setAttribute('target-id', this.modelID);
+            parent.append(this.pathPreSelectionArea);
+        }
+    }
+
     appendToParent() {
         this.parent && this.parent.append(this.elem);
     }
@@ -269,7 +297,7 @@ class SvgModel extends BaseModel {
         this.isToolPathSelect = selected;
 
         switch (this.type) {
-            // case 'path':
+            case 'path':
             case 'circle':
             case 'rect':
             case 'ellipse':
@@ -298,45 +326,168 @@ class SvgModel extends BaseModel {
         }
     }
 
+    calculationPath(path) {
+        const allPoints = [];
+        svgPath(path).iterate((segment, __, x, y) => {
+            const arr = cloneDeep(segment);
+            const mark = arr.shift();
+
+            if (mark !== 'M' && mark !== 'Z') {
+                const points = [];
+                points.push([x, y]);
+                for (let index = 0; index < arr.length; index += 2) {
+                    points.push([
+                        Number(arr[index]),
+                        Number(arr[index + 1])
+                    ]);
+                }
+                allPoints.push(points);
+            }
+        });
+
+        const sorted = [];
+        const findConnect = (arr) => {
+            const latest = sorted[sorted.length - 1];
+            const latestPoints = latest.item;
+
+            return [arr[0], arr[arr.length - 1]].some((i) => {
+                return (!latest.connected ? [latestPoints[0], latestPoints[latestPoints.length - 1]] : [latestPoints[latestPoints.length - 1]]).some((j) => {
+                    return Math.abs(i[0] - j[0]) <= SVG_MOVE_MINI_DISTANCE && Math.abs(i[1] - j[1]) <= SVG_MOVE_MINI_DISTANCE;
+                });
+            });
+        };
+        const setSort = (item, connected) => {
+            const latest = sorted[sorted.length - 1];
+            if (connected && latest) {
+                if (Math.abs(latest.item[latest.item.length - 1][0] - item[0][0]) <= SVG_MOVE_MINI_DISTANCE && Math.abs(latest.item[latest.item.length - 1][1] - item[0][1]) <= SVG_MOVE_MINI_DISTANCE) {
+                    sorted.push({ item, connected: true });
+                } else {
+                    item.reverse();
+                    sorted.push({ item, connected: true });
+                }
+            } else {
+                sorted.push({ item, connected: false });
+            }
+        };
+
+        const setupConnection = () => {
+            let flag = true;
+            while (flag) {
+                const connected = allPoints.map((i, _index) => {
+                    return {
+                        arr: i,
+                        _index
+                    };
+                }).filter(p => p.arr && findConnect(p.arr));
+                const latest = sorted[sorted.length - 1];
+                const latestPoints = latest.item;
+
+                if (connected.length > 0) {
+                    const c = allPoints[connected[0]._index];
+                    // flip first point
+                    if (!latest.connected) {
+                        if (!(
+                            Math.abs(latestPoints[latestPoints.length - 1][0] - c[0][0]) <= SVG_MOVE_MINI_DISTANCE
+                            && Math.abs(latestPoints[latestPoints.length - 1][1] - c[0][1]) <= SVG_MOVE_MINI_DISTANCE)
+                        ) {
+                            const arr = latestPoints;
+                            const a = arr.pop();
+                            const b = arr.shift();
+                            arr.push(b);
+                            arr.unshift(a);
+                            sorted[sorted.length - 1] = {
+                                item: arr,
+                                connected: false
+                            };
+                        }
+                    }
+                    setSort(c, true);
+                    allPoints[connected[0]._index] = null;
+                    flag = true;
+                } else {
+                    flag = false;
+                }
+            }
+        };
+
+        for (let index = 0; index < allPoints.length; index++) {
+            if (sorted.length === 0) {
+                setSort(allPoints[index], false);
+                allPoints[index] = null;
+                setupConnection();
+            }
+            if (allPoints[index]) {
+                // TODO: Judge whether the new point is connected to the head of the latest clip. Flip the latest clip
+                setSort(allPoints[index], false);
+                setupConnection();
+            }
+        }
+
+        const mark = (length) => {
+            switch (length) {
+                case 1:
+                    return 'L';
+                case 2:
+                    return 'Q';
+                case 3:
+                    return 'C';
+                default:
+                    return '';
+            }
+        };
+
+        const paths = sorted.reduce((p, c) => {
+            const arr = c.item;
+            if (c.connected) {
+                arr.shift();
+                p[p.length - 1] += ` ${mark(arr.length)} ${arr.map(item => item.join(' ')).join(' ')}`;
+            } else {
+                p.push(`M ${arr.shift().join(' ')} ${mark(arr.length)} ${arr.map(item => item.join(' ')).join(' ')}`);
+            }
+            return p;
+        }, []);
+
+        return paths;
+    }
+
     genModelConfig() {
         const elem = this.elem;
         const coord = coordGmSvgToModel(this.size, elem);
 
-        // eslint-disable-next-line prefer-const
-        let { x, y, width, height, positionX, positionY, scaleX, scaleY } = coord;
-        width *= scaleX;
-        height *= scaleY;
+        const { x, y, width, height, positionX, positionY } = coord;
+        let modelContent = '';
+        const isDraw = elem.getAttribute('id')?.includes('graph');
 
-        const clone = elem.cloneNode(true);
-        clone.setAttribute('transform', `scale(${scaleX} ${scaleY})`);
-        clone.setAttribute('font-size', clone.getAttribute('font-size'));
-
-        let vx = x * scaleX;
-        let vy = y * scaleY;
-        let vwidth = width;
-        let vheight = height;
-
-        if (scaleX < 0) {
-            vx += vwidth;
-            vwidth = -vwidth;
-        }
-        if (scaleY < 0) {
-            vy += vheight;
-            vheight = -vheight;
+        if (elem instanceof SVGPathElement && isDraw) {
+            const path = elem.getAttribute('d');
+            const paths = this.calculationPath(path);
+            const segments = paths.map(item => {
+                const clone = elem.cloneNode(true);
+                clone.setAttribute('d', item);
+                clone.setAttribute('transform', 'scale(1 1)');
+                clone.setAttribute('font-size', clone.getAttribute('font-size'));
+                return new XMLSerializer().serializeToString(clone);
+            });
+            modelContent = segments.join('');
+        } else {
+            const clone = elem.cloneNode(true);
+            clone.setAttribute('transform', 'scale(1 1)');
+            clone.setAttribute('font-size', clone.getAttribute('font-size'));
+            modelContent = new XMLSerializer().serializeToString(clone);
         }
 
         // Todo: need to optimize
-        const content = `<svg x="0" y="0" width="${vwidth}mm" height="${vheight}mm" `
-            + `viewBox="${vx} ${vy} ${vwidth} ${vheight}" `
-            + `xmlns="http://www.w3.org/2000/svg">${new XMLSerializer().serializeToString(clone)}</svg>`;
+        const content = `<svg x="0" y="0" width="${width}mm" height="${height}mm" `
+            + `viewBox="${x} ${y} ${width} ${height}" `
+            + `xmlns="http://www.w3.org/2000/svg">${modelContent}</svg>`;
         const model = {
             modelID: elem.getAttribute('id'),
             content: content,
             width: width,
             height: height,
             transformation: {
-                positionX: positionX,
-                positionY: positionY
+                positionX,
+                positionY
             },
             config: {
                 svgNodeName: elem.nodeName,
@@ -351,12 +502,10 @@ class SvgModel extends BaseModel {
 
     // just for svg file
     async uploadSourceImage() {
-        const { uploadName } = this;
-
-        if (!uploadName || uploadName.indexOf('.svg') === -1) {
+        if (this.resource.originalFile.name.indexOf('.svg') === -1) {
             return;
         }
-        const content = await fetch(`${DATA_PREFIX}/${uploadName}`, { method: 'GET' })
+        const content = await fetch(this.resource.originalFile.path, { method: 'GET' })
             .then(res => res.text());
 
         const canvas = document.createElement('canvas');
@@ -392,14 +541,11 @@ class SvgModel extends BaseModel {
             sourceWidth = width,
             sourceHeight = height;
 
-
         this.sourceHeight = sourceHeight || this.sourceHeight;
         this.sourceWidth = sourceWidth || this.sourceWidth;
-        this.width = width || this.width;
-        this.height = height || this.height;
-        this.uploadName = uploadName || this.uploadName;
-        this.processImageName = processImageName || this.processImageName;
-
+        // this.uploadName = uploadName || this.uploadName;
+        this.resource.originalFile.update(uploadName);
+        this.resource.processedFile.update(processImageName);
 
         // this.displayModelObject3D(uploadName, sourceWidth, sourceHeight);
         // const width = this.transformation.width;
@@ -436,10 +582,14 @@ class SvgModel extends BaseModel {
         return this.elem.transform.baseVal;
     }
 
+    isDrawGraphic() {
+        return this.elem.getAttribute('id')?.includes('graph');
+    }
+
     refreshElemAttrs() {
         const elem = this.elem;
-        const { config, transformation, uploadName, width, height } = this;
-        const href = `${DATA_PREFIX}/${uploadName}`;
+        const { config, transformation, width, height } = this;
+        const href = this.resource.originalFile.path;
         const { positionX, positionY } = transformation;
 
         for (const key of Object.keys(config)) {
@@ -463,6 +613,21 @@ class SvgModel extends BaseModel {
             //     numberAttrs.push('x1', 'y1', 'x2', 'y2');
             //     break;
             case 'path': {
+                const isDraw = this.isDrawGraphic();
+                if (isDraw) {
+                    const d = elem.getAttribute('d');
+                    const bbox = elem.getBBox();
+                    const cx = bbox.x + bbox.width / 2;
+                    const cy = bbox.y + bbox.height / 2;
+                    // clone Model
+                    if (cx !== x || cy !== y) {
+                        const newPath = svgPath(d)
+                            .translate(x - cx, y - cy)
+                            .toString();
+                        elem.setAttribute('d', newPath);
+                    }
+                    break;
+                }
                 const imageElement = document.createElementNS(NS.SVG, 'image');
                 const absWidth = Math.abs(width), absHeight = Math.abs(height);
                 const attributes = {
@@ -491,10 +656,12 @@ class SvgModel extends BaseModel {
                 break;
             }
             case 'image': {
-                elem.setAttribute('x', x - transformation.width / 2);
-                elem.setAttribute('y', y - transformation.height / 2);
-                elem.setAttribute('width', transformation.width);
-                elem.setAttribute('height', transformation.height);
+                const originalWidth = Math.abs(transformation.width / transformation.scaleX);
+                const originalHeight = Math.abs(transformation.height / transformation.scaleY);
+                elem.setAttribute('x', x - originalWidth / 2);
+                elem.setAttribute('y', y - originalHeight / 2);
+                elem.setAttribute('width', originalWidth);
+                elem.setAttribute('height', originalHeight);
                 if (!elem.getAttribute('href')) {
                     elem.setAttribute('href', checkIsImageSuffix(href) ? href : './resources/images/loading.gif');
                 }
@@ -721,6 +888,23 @@ class SvgModel extends BaseModel {
                 element.setAttribute('height', imageHeight);
                 break;
             }
+            case 'path': {
+                const d = element.getAttribute('d');
+                const bbox = element.getBBox();
+                const cx = bbox.x + bbox.width / 2;
+                const cy = bbox.y + bbox.height / 2;
+                const newPath = svgPath(d)
+                    .translate(-cx, -cy)
+                    .scale(absScaleX, absScaleY)
+                    // .rotate(angle)
+                    .translate(x, y)
+                    .toString();
+                element.setAttribute('d', newPath);
+                scaleX /= absScaleX;
+                scaleY /= absScaleY;
+                break;
+            }
+
             case 'rect': {
                 element.setAttribute('x', x - width * absScaleX / 2);
                 element.setAttribute('y', y - height * absScaleY / 2);
@@ -742,6 +926,7 @@ class SvgModel extends BaseModel {
         }
 
         SvgModel.recalculateElementTransformList(element, { x, y, scaleX, scaleY, angle });
+        SvgModel.updatePathPreSelectionArea(element);
     }
 
     static recalculateElementTransformList(element, t) {
@@ -917,8 +1102,8 @@ class SvgModel extends BaseModel {
 
     generateModelObject3D() {
         if (this.sourceType !== '3d' && this.sourceType !== 'image3d') {
-            const uploadPath = `${DATA_PREFIX}/${this.uploadName}`;
-            const texture = new THREE.TextureLoader().load(uploadPath, () => {
+            const uploadPath = this.resource.originalFile.path;
+            const texture = new THREE.TextureLoader().load(`${uploadPath}`, () => {
                 this.meshObject.dispatchEvent(EVENTS.UPDATE);
             });
             // TODO make the 'MeshBasicMaterial' to be transparent
@@ -942,12 +1127,11 @@ class SvgModel extends BaseModel {
     }
 
     generateProcessObject3D() {
-        if (!this.processImageName) {
+        if (!this.resource.processedFile.name) {
             return;
         }
-        const uploadPath = `${DATA_PREFIX}/${this.processImageName}`;
-        // const texture = new THREE.TextureLoader().load(uploadPath);
-        const texture = new THREE.TextureLoader().load(uploadPath, () => {
+        const uploadPath = this.resource.processedFile.path;
+        const texture = new THREE.TextureLoader().load(`${uploadPath}`, () => {
             this.meshObject.dispatchEvent(EVENTS.UPDATE);
         });
         const material = new THREE.MeshBasicMaterial({
@@ -967,6 +1151,37 @@ class SvgModel extends BaseModel {
         this.meshObject.add(this.processObject3D);
 
         this.updateTransformation(this.transformation);
+    }
+
+    generatePathPreSelectionArea() {
+        if (this.type === 'path') {
+            const d = this.elem.getAttribute('d');
+            const strokeWidth = this.elem.getAttribute('stroke-width');
+            const id = this.elem.getAttribute('id');
+            this.pathPreSelectionArea = createSVGElement({
+                element: 'path',
+                attr: {
+                    'target-id': id,
+                    'stroke-width': Number(strokeWidth) * 20,
+                    d,
+                    fill: 'transparent',
+                    stroke: 'transparent'
+                }
+            });
+        }
+    }
+
+    static updatePathPreSelectionArea(element) {
+        if (element && element.nodeName === 'path') {
+            const d = element.getAttribute('d');
+            const id = element.getAttribute('id');
+            const transform = element.getAttribute('transform');
+            const pathPreSelectionArea = document.querySelector(`[target-id="${id}"]`);
+            if (pathPreSelectionArea) {
+                pathPreSelectionArea.setAttribute('d', d);
+                pathPreSelectionArea.setAttribute('transform', transform);
+            }
+        }
     }
 
     // updateVisible(param) {
@@ -1005,9 +1220,8 @@ class SvgModel extends BaseModel {
             }
 
             this.mode = mode;
-            this.processImageName = null;
+            this.resource.processedFile.update(null);
         }
-
         this.generateProcessObject3D();
 
         // const res = await api.processImage({
@@ -1040,6 +1254,36 @@ class SvgModel extends BaseModel {
         );
     }
 
+    computevertexPoints() {
+        const { rotationZ } = this.transformation;
+        const { width, height, positionX: x, positionY: y } = this.transformation;
+        if (!width) {
+            this.vertexPoints = [
+                [x, y + height / 2],
+                [x, y - height / 2],
+            ];
+        } else if (!height) {
+            this.vertexPoints = [
+                [x - width / 2, y],
+                [x + width / 2, y],
+            ];
+        } else {
+            const modelBoxPoints = [
+                [x - width / 2, y + height / 2],
+                [x - width / 2, y - height / 2],
+                [x + width / 2, y - height / 2],
+                [x + width / 2, y + height / 2]
+            ];
+
+            this.vertexPoints = modelBoxPoints.map(([x1, y1]) => {
+                return [
+                    (x1 - x) * Math.cos(rotationZ) - (y1 - y) * Math.sin(rotationZ) + x,
+                    (x1 - x) * Math.sin(rotationZ) + (y1 - y) * Math.cos(rotationZ) + y
+                ];
+            });
+        }
+    }
+
     getTaskInfo() {
         const taskInfo = {
             modelID: this.modelID,
@@ -1055,8 +1299,8 @@ class SvgModel extends BaseModel {
             sourceWidth: this.sourceWidth,
             scale: this.scale,
             originalName: this.originalName,
-            uploadName: this.uploadName,
-            processImageName: this.processImageName,
+            uploadName: this.resource.originalFile.name,
+            processImageName: this.resource.processedFile.name,
 
             transformation: {
                 ...this.transformation
@@ -1091,11 +1335,19 @@ class SvgModel extends BaseModel {
             height: t.height * Math.abs(t.scaleY)
         };
 
+        this.width = transformation.width;
+        this.height = transformation.height;
+
         this.updateTransformation(transformation);
         // Need to update source for SVG, element attributes(width, height) changed
         // Not to update source for text, because <path> need to remap first
         // Todo, <Path> error, add remap method or not to use model source
-        this.updateSource();
+        // this.updateSource();
+        const isDraw = this.isDrawGraphic();
+        if (isDraw) {
+            this.config.d = this.elem.getAttribute('d');
+        }
+        this.computevertexPoints();
     }
 
     async updateAndRefresh({ transformation, config, ...others } = {}) {
@@ -1110,7 +1362,13 @@ class SvgModel extends BaseModel {
         }
         if (Object.keys(others)) {
             for (const key of Object.keys(others)) {
-                this[key] = others[key];
+                // For inner text, have to update 'originalFile' inside resource when 'uploadName' changed
+                if (key === 'uploadName') {
+                    this.resource.originalFile.update(others[key]);
+                    this[key] = others[key];
+                } else {
+                    this[key] = others[key];
+                }
             }
         }
 
@@ -1126,7 +1384,9 @@ class SvgModel extends BaseModel {
     clone(modelGroup) {
         const clone = new SvgModel({ ...this }, modelGroup);
         clone.originModelID = this.modelID;
-        clone.modelID = uuid.v4();
+        const specialPrefix = this.isDrawGraphic() ? 'graph-' : '';
+        clone.modelID = `${specialPrefix}${uuid()}`;
+        clone.updateConfig(clone.config);
         clone.generateModelObject3D();
         clone.generateProcessObject3D();
         this.meshObject.updateMatrixWorld();
@@ -1148,7 +1408,7 @@ class SvgModel extends BaseModel {
 
     updateProcessImageName(processImageName) {
         // this.processMode(this.mode, this.config, processImageName);
-        this.processImageName = processImageName;
+        this.resource.processedFile.update(processImageName);
 
         this.generateProcessObject3D();
     }
@@ -1157,23 +1417,38 @@ class SvgModel extends BaseModel {
     getSerializableConfig() {
         const {
             modelID, limitSize, headType, sourceType, originalName, config, mode,
-            transformation, visible, uploadName, processImageName
+            transformation, visible, sourceHeight, sourceWidth
         } = this;
         return {
             modelID,
             limitSize,
             headType,
             sourceType,
-            sourceHeight: transformation.height,
-            sourceWidth: transformation.width,
+            sourceHeight,
+            sourceWidth,
             originalName,
-            uploadName,
+            uploadName: this.resource.originalFile.name,
             config,
             visible,
             mode,
             transformation,
-            processImageName
+            processImageName: this.resource.processedFile.name
         };
+    }
+
+    isStraightLine() {
+        if (this.type === 'path') {
+            const d = this.elem.getAttribute('d');
+            const flag = ['M', 'L', 'Z'];
+            let res = true;
+            svgPath(d).iterate((segment, index) => {
+                if (segment[0] !== flag[index]) {
+                    res = false;
+                }
+            });
+            return res;
+        }
+        return false;
     }
 }
 

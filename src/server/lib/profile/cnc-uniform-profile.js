@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { isNil, includes } from 'lodash';
-import { ConfigV1Suffix, ConfigV1Regex } from '../../constants';
+import { ConfigV1Suffix, ConfigV1Regex, ConfigV2Regex, ConfigV2Suffix } from '../../constants';
 
 
 const defaultToolListNames = [
@@ -11,6 +11,12 @@ const defaultToolListNames = [
     'Straight Groove V-bit'
 ];
 const defaultParameters = {
+    toolType: {
+        default_value: 'vbit',
+        type: 'input',
+        description: 'Set the tool type',
+        lable: 'Tool Type'
+    },
     diameter: {
         default_value: 0.2,
         type: 'float',
@@ -80,6 +86,16 @@ const defaultParameters = {
         unit: 'mm',
         label: 'Stepover',
         description: 'Set the space between parallel toolpaths.'
+    },
+    tool_extension_enabled: {
+        default_value: true,
+        type: 'enum',
+        label: 'Tool Limiting',
+        description: 'Limit tool location by object boundary \n - Tangent to Boundary:  Tool is located inside the machining  boundary \n - Past Boundary: tool can exceed machining boundary',
+        options: {
+            'false': 'Tangent to Boundary',
+            'true': 'Past Boundary'
+        }
     }
 };
 export const addNewParameter = (settings) => {
@@ -116,6 +132,7 @@ export const cncUniformProfile = (filename, configDir) => {
                     newDefinition.version = json.version;
                     newDefinition.name = item.name;
                     newDefinition.settings = item.config;
+                    newDefinition.inherits = 'snapmaker2';
                     const newName = `${json.definitionId}${item.name}`;
                     newDefinition.settings = addNewParameter(newDefinition?.settings);
                     fs.writeFileSync(path.join(configDir, `${newName}${ConfigV1Suffix}`), JSON.stringify(newDefinition));
@@ -123,5 +140,12 @@ export const cncUniformProfile = (filename, configDir) => {
             });
             fs.unlinkSync(filePath);
         }
+    }
+    if (ConfigV2Regex.test(filename) && filename.substr(0, filename.length - ConfigV2Suffix.length) !== 'active') {
+        const filePath = path.join(configDir, filename);
+        const data = fs.readFileSync(filePath, 'utf8');
+        const json = JSON.parse(data);
+        json.inherits = 'snapmaker2';
+        fs.writeFileSync(filePath, JSON.stringify(json));
     }
 };

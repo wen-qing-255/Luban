@@ -31,6 +31,9 @@
     border-bottom-right-radius: 0;
     border-top-right-radius: 0;
 }
+.border-radius-2 {
+    border-radius: $px-grade-1
+}
 .border-radius-4 {
     border-radius: $px-grade-2
 }
@@ -39,6 +42,9 @@
 }
 .border-radius-12 {
     border-radius: $px-grade-6;
+}
+.border-radius-16 {
+    border-radius: $px-grade-8;
 }
 .border-radius-24 {
   border-radius: $px-grade-12;
@@ -52,8 +58,17 @@
 .border-default-grey-1 {
     border: 1px solid $grey-1;
 }
+.border-bottom-dashed-grey-1 {
+    border-bottom: 2px dashed $grey-1;
+}
+.border-default-black-2 {
+    border: 1px solid $black-2;
+}
 .border-default-black-5 {
     border: 1px solid $black-5;
+}
+.border-dashed-black-5 {
+    border: 1px dashed $black-5;
 }
 .border-color-blue-2{
     border-color: $blue-2
@@ -61,8 +76,17 @@
 .border-bottom-normal {
     border-bottom: 1px solid $grey-1;
 }
+.border-left-normal {
+    border-left: 1px solid $grey-1;
+}
+.border-bottom-dashed {
+    border-bottom: 1px dashed $grey-1;
+}
 .border-top-normal {
     border-top: 1px solid $grey-1;
+}
+.border-top-dotted {
+    border-top: 1px dotted $grey-1;
 }
 .border-right-w0 {
     border-right: 0px;
@@ -101,4 +125,40 @@
 }
 .bottom-8 {
     bottom: $px-grade-4;
+}
+
+.border-z {
+    .ant-input-affix-wrapper {
+        border-color: #1890ff !important;
+        .ant-input-prefix {
+                color: #1890ff;
+            }
+        > input {
+            color: #1890ff;
+        }
+    }
+}
+
+.border-y {
+    .ant-input-affix-wrapper {
+        border-color: #4cb518 !important;
+        .ant-input-prefix {
+                color: #4cb518;
+            }
+        > input {
+            color: #4cb518;
+        }
+    }
+}
+
+.border-x {
+    .ant-input-affix-wrapper {
+        border-color: #ff5759 !important;
+        .ant-input-prefix {
+                color: #ff5759;
+            }
+        > input {
+            color: #ff5759;
+        }
+    }
 }

@@ -1,30 +1,43 @@
-import { Vector3, Group, Matrix4, BufferGeometry, MeshPhongMaterial, Mesh, DoubleSide, Float32BufferAttribute, MeshBasicMaterial } from 'three';
+import { Sphere, SphereBufferGeometry, MeshStandardMaterial, Vector3, Group, Matrix4, BufferGeometry, MeshPhongMaterial, Mesh, DoubleSide, Float32BufferAttribute, MeshBasicMaterial } from 'three';
 import EventEmitter from 'events';
+import { CONTAINED, INTERSECTED, NOT_INTERSECTED } from 'three-mesh-bvh';
 // import { EPSILON } from '../../constants';
-import uuid from 'uuid';
+import { v4 as uuid } from 'uuid';
 import _ from 'lodash';
+import i18n from '../lib/i18n';
 
-import Model from './BaseModel';
+import Model from './ThreeBaseModel';
 import ThreeModel from './ThreeModel';
 import SvgModel from './SvgModel';
-import { SELECTEVENT } from '../constants';
+import { EPSILON, SELECTEVENT } from '../constants';
 
 import ThreeUtils from '../three-extensions/ThreeUtils';
+import ThreeGroup from './ThreeGroup';
+import PrimeTowerModel from './PrimeTowerModel';
+import { HEAD_PRINTING } from '../../server/constants';
+import { calculateUvVector } from '../lib/threejs/ThreeStlCalculation';
 
 const EVENTS = {
     UPDATE: { type: 'update' }
 };
 const INDEXMARGIN = 0.02;
+const SUPPORT_AVAIL_AREA_COLOR = [0.5725490196078431, 0.32941176470588235, 0.8705882352941177];
+const SUPPORT_ADD_AREA_COLOR = [0.2980392156862745, 0, 0.5098039215686274];
+const SUPPORT_UNAVAIL_AREA_COLOR = [0.9, 0.9, 0.9];
+const AVAIL = -1, NONE = 0, FACE = 1/* , POINT = 2, LINE = 3 */;
 
 class ModelGroup extends EventEmitter {
+    groupsChildrenMap = new Map();
+
+    brushMesh = null;
+
     constructor(headType) {
         super();
         this.headType = headType;
         // this.object = new Object3D();
         this.object = new Group();
-
+        this.grayModeObject = new Group();
         this.models = [];
-
         this.selectedGroup = new Group();
         this.selectedGroup.uniformScalingState = true;
         this.selectedGroup.boundingBox = [];
@@ -55,8 +68,11 @@ class ModelGroup extends EventEmitter {
         this.materials = materials;
     }
 
-    setDataChangedCallback(handler) {
+    setDataChangedCallback(handler, update) {
         this.onDataChangedCallback = handler;
+        if (update) {
+            this.primeTowerHeightCallback = update;
+        }
     }
 
     // TODO: save last value and compare changes
@@ -107,12 +123,26 @@ class ModelGroup extends EventEmitter {
         return ThreeUtils.computeBoundingBox(this.object);
     }
 
+    /**
+     * Note: get valid area
+     */
+    getValidArea() {
+        return this._bbox;
+    }
+
     getModel(modelID) {
         return this.models.find(d => d.modelID === modelID);
     }
 
-    getModelByModelName(modelName) {
-        return this.models.find(d => d.modelName === modelName);
+    getModelByModelName(modelName, models = this.models) {
+        return models.find(d => {
+            if (d.modelName === modelName) {
+                return true;
+            } else if (d.children && d.children.length > 0) {
+                return this.getModelByModelName(modelName, d.children);
+            }
+            return false;
+        });
     }
 
     // TODO: Unify method return type, it causes unnecessary calculations.
@@ -132,9 +162,6 @@ class ModelGroup extends EventEmitter {
                 rotationX: this.selectedGroup.rotation.x,
                 rotationY: this.selectedGroup.rotation.y,
                 rotationZ: this.selectedGroup.rotation.z,
-                // todo, width and height use for 2d
-                width: this.selectedGroup.width,
-                height: this.selectedGroup.height
             };
         } else {
             return {};
@@ -146,6 +173,7 @@ class ModelGroup extends EventEmitter {
             return {
                 positionX: this.selectedGroup.position.x,
                 positionY: this.selectedGroup.position.y,
+                positionZ: this.selectedGroup.position.z,
                 scaleX: this.selectedGroup.scale.x,
                 scaleY: this.selectedGroup.scale.y,
                 scaleZ: this.selectedGroup.scale.z,
@@ -183,29 +211,51 @@ class ModelGroup extends EventEmitter {
         };
     }
 
-    hasAnyModelVisible() {
-        return this.models.filter(m => !m.supportTag).some((model) => model.visible);
+    getAllModelBBoxWHD() {
+        const whd = new Vector3(0, 0, 0);
+        ThreeUtils.computeBoundingBox(this.object).getSize(whd);
+        return {
+            x: whd.x,
+            y: whd.y,
+            z: whd.z
+        };
     }
 
-    hideSelectedModel() {
-        const models = this.getSelectedModelArray();
+    hasAnyModelVisible() {
+        return this.getModels('primeTower').some((model) => model.visible);
+    }
+
+    toggleModelsVisible(visible, models) {
         models.forEach((model) => {
-            model.visible = false;
-            model.meshObject.visible = false;
+            model.visible = visible;
+            model.meshObject.visible = visible;
+            if (model instanceof ThreeGroup) {
+                model.traverse((subModel) => {
+                    subModel.visible = visible;
+                    subModel.meshObject.visible = visible;
+                });
+            } else if (model.parent && model.parent instanceof ThreeGroup) {
+                let parentVisible = false;
+                model.parent.traverse((subModel) => {
+                    parentVisible = subModel.visible || parentVisible;
+                });
+                model.parent.visible = parentVisible;
+                model.parent.meshObject.visible = parentVisible;
+            }
         });
         // Make the reference of 'models' change to re-render
         this.models = [...this.models];
         return this.getState();
     }
 
-    showSelectedModel() {
-        const models = this.getSelectedModelArray();
-        models.forEach((model) => {
-            model.visible = true;
-            model.meshObject.visible = true;
-        });
-        this.models = [...this.models];
-        return this.getState();
+    hideSelectedModel(targetModels = null) {
+        const models = targetModels || this.getSelectedModelArray();
+        return this.toggleModelsVisible(false, models);
+    }
+
+    showSelectedModel(targetModels = null) {
+        const models = targetModels || this.getSelectedModelArray();
+        return this.toggleModelsVisible(true, models);
     }
 
     _removeSelectedModels() {
@@ -215,13 +265,27 @@ class ModelGroup extends EventEmitter {
         });
     }
 
-    removeModel(model) {
-        if (!model.supportTag) { // remove support children
+    removeModel(model, loop = false) {
+        if (model.type === 'primeTower') return;
+        if (!(model instanceof SvgModel)) {
+            model.setSelected(false);
+        }
+        if (model instanceof ThreeGroup) {
+            model.children.forEach((child) => {
+                this.removeModel(child, true);
+            });
+        }
+        if (!model.supportTag && model instanceof ThreeModel) { // remove support children
             this.models
                 .filter(i => i.supportTag && i.target === model)
                 .map(m => this.removeModel(m));
         }
-
+        if (model.meshObject && model.parent instanceof ThreeGroup) {
+            // Reset the model to be deleted to the object
+            // Then update the tran of the model to the coordinates based on the world coordinate system
+            ThreeUtils.setObjectParent(model.meshObject, this.object);
+            model.onTransform();
+        }
         if (model.meshObject && model.meshObject.parent) {
             model.meshObject.parent.remove(model.meshObject);
         }
@@ -230,23 +294,44 @@ class ModelGroup extends EventEmitter {
             model.meshObject.remove(model.processObject3D);
         }
         model.meshObject.removeEventListener('update', this.onModelUpdate);
-        this.models = this.models.filter(item => item !== model);
+        if (model.parent instanceof ThreeGroup) {
+            const groupIndex = this.models.findIndex(m => m.modelID === model.parent.modelID);
+            if (this.models[groupIndex].children.length === 1) {
+                this.models[groupIndex].onTransform();
+                this.models.splice(groupIndex, 1);
+            } else {
+                this.models[groupIndex].children = this.models[groupIndex].children.filter(subModel => subModel !== model);
+                if (!loop) {
+                    // When deleting a group, do not do stickToPlate again. To avoid updating the center point of the group
+                    // Otherwise, the z-axis of the model in the group being deleted will be affected
+                    this.stickToPlateAndCheckOverstepped(this.models[groupIndex]);
+                }
+                this.models[groupIndex].updateGroupExtruder();
+            }
+            this.models = this.models.concat();
+        } else {
+            this.models = this.models.filter(item => item !== model);
+        }
         this.modelChanged();
+        model.sourceType === '3d' && this.updatePrimeTowerHeight();
     }
 
     // remove selected models' supports
     // remove all support if no model selected
+    /**
+     * deprecated
+     */
     removeAllManualSupport() {
         if (this.selectedModelArray.length) {
-            this.selectedModelArray.forEach(target => {
-                this.models.forEach(m => {
+            this.traverseModels(this.selectedModelArray, target => {
+                this.traverseModels(this.models, m => {
                     if (m.supportTag === true && m.target === target) {
                         this.removeModel(m);
                     }
                 });
             });
         } else {
-            this.models.forEach(m => {
+            this.traverseModels(this.models, m => {
                 if (m.supportTag === true) {
                     this.removeModel(m);
                 }
@@ -268,7 +353,7 @@ class ModelGroup extends EventEmitter {
         const models = this.getModels();
         for (const model of models) {
             model.meshObject.removeEventListener('update', this.onModelUpdate);
-            model.meshObject.parent.remove(model.meshObject);
+            model.meshObject.parent && model.meshObject.parent.remove(model.meshObject);
         }
         this.models = [];
     }
@@ -277,16 +362,17 @@ class ModelGroup extends EventEmitter {
      * Remove all models.
      */
     removeAllModels() {
-        this._removeAllModels();
         this.unselectAllModels();
+        this._removeAllModels();
 
         this.modelChanged();
+        this.updatePrimeTowerHeight();
         return this._getEmptyState();
     }
 
-    bringSelectedModelToFront() {
-        const selected = this.getSelectedModel();
-        const sorted = this.getSortedModelsByPositionZ().filter(model => model !== selected);
+    bringSelectedModelToFront(model) {
+        const selected = model || this.getSelectedModel();
+        const sorted = this.getSortedModelsByPositionZ().filter(item => item !== selected);
         for (let i = 0; i < sorted.length; i++) {
             sorted[i].updateTransformation({ 'positionZ': (i + 1) * INDEXMARGIN });
         }
@@ -430,6 +516,7 @@ class ModelGroup extends EventEmitter {
 
     updateBoundingBox(bbox) {
         this._bbox = bbox;
+        return this.getState();
     }
 
     totalEstimatedTime() {
@@ -443,41 +530,27 @@ class ModelGroup extends EventEmitter {
         return totalEstimatedTime_;
     }
 
-    undoRedo(models) {
-        const newModels = models.map(d => d.clone(this));
-
-        this.unselectAllModels();
-        for (const model of this.models) {
-            model.meshObject.removeEventListener('update', this.onModelUpdate);
-            ThreeUtils.removeObjectParent(model.meshObject);
-        }
-        this.models.splice(0);
-        for (const model of newModels) {
-            if (model.supportTag) {
-                if (!model.target) continue;
-                model.target = newModels.find(i => i.originModelID === model.target.modelID);
-                if (!model.target) continue;
-            }
-            model.meshObject.addEventListener('update', this.onModelUpdate);
-            model.computeBoundingBox();
-            model.stickToPlate();
-            this.models.push(model);
-            let parent = this.object;
-            if (model.supportTag) { // support parent should be the target model
-                parent = model.target.meshObject;
-            }
-            ThreeUtils.setObjectParent(model.meshObject, parent);
-        }
-
-        return this.getState();
-    }
-
-    getModels() {
+    getModels(filterKey = '') {
         const models = [];
         for (const model of this.models) {
-            models.push(model);
+            if (model.type === filterKey) {
+                continue;
+            } else {
+                models.push(model);
+            }
         }
         return models;
+    }
+
+    getVisibleModels() {
+        return this.models.filter(model => {
+            if (!model.visible || model.type === 'primeTower') {
+                return false;
+            } else if (model instanceof ThreeGroup) {
+                return model.children.every(subModel => subModel.visible);
+            }
+            return true;
+        });
     }
 
 
@@ -498,7 +571,9 @@ class ModelGroup extends EventEmitter {
         }
     }
 
-    // used only for laser/cnc
+    /**
+     * used only for laser/cnc
+     */
     addSelectedModels(modelArray) {
         this.selectedGroup = new Group();
         for (const model of modelArray) {
@@ -533,14 +608,39 @@ class ModelGroup extends EventEmitter {
 
     // TODO: model or modelID, need rename this method and add docs
     // use for widget
+    // If isMultiSelect is equal to true, it is mutually exclusive
     selectModelById(modelID, isMultiSelect = false) {
-        const selectModel = this.models.find(d => d.modelID === modelID);
+        let selectModel = null;
+        this.traverseModels(this.models, (model) => {
+            if (model.modelID === modelID) {
+                selectModel = model;
+            }
+        });
 
         if (isMultiSelect) {
             if (selectModel) {
                 const objectIndex = this.selectedGroup.children.indexOf(selectModel.meshObject);
                 if (objectIndex === -1) {
-                    this.addModelToSelectedGroup(selectModel);
+                    if (this.selectedModelArray.length === 1 && this.selectedModelArray[0].type === 'primeTower') {
+                        this.unselectAllModels();
+                    }
+                    let isModelAcrossGroup = false;
+                    for (const selectedModel of this.selectedModelArray) {
+                        if (selectedModel.parent !== selectModel.parent) {
+                            isModelAcrossGroup = true;
+                            break;
+                        }
+                    }
+                    if (isModelAcrossGroup) {
+                        this.unselectAllModels();
+                    }
+
+                    if (selectModel.parent && this.selectedModelArray.length === selectModel.parent.children.length - 1) {
+                        this.unselectAllModels();
+                        this.addModelToSelectedGroup(selectModel.parent);
+                    } else {
+                        this.addModelToSelectedGroup(selectModel);
+                    }
                 } else {
                     this.removeModelFromSelectedGroup(selectModel);
                 }
@@ -548,12 +648,75 @@ class ModelGroup extends EventEmitter {
         } else {
             this.unselectAllModels();
             if (selectModel) {
-                this.addModelToSelectedGroup(selectModel);
+                if (selectModel?.parent?.children.length === 1) {
+                    this.addModelToSelectedGroup(selectModel.parent);
+                } else {
+                    this.addModelToSelectedGroup(selectModel);
+                }
             }
         }
 
         this.modelChanged();
         return this.getState(false);
+    }
+
+    traverseModels(models, callback) {
+        models.forEach(model => {
+            if (model instanceof ThreeGroup) {
+                this.traverseModels(model.children, callback);
+            }
+            (typeof callback === 'function') && callback(model);
+        });
+    }
+
+    /**
+     * filter models, If the return value of callback is false, it will filter
+     * @param {Array} models
+     * @param {Function} callback Callback function has a parameter, which is an item of the loop
+     * @returns new models
+     */
+    filterModels(models, callback) {
+        return models.filter((model) => {
+            if (model instanceof ThreeGroup) {
+                return callback(model) !== false && this.filterModels(model.children, callback).length > 0;
+            }
+            if (typeof callback === 'function') {
+                return callback(model);
+            }
+            return true;
+        }).map((model) => {
+            if (model instanceof ThreeGroup) {
+                model.children = this.filterModels(model.children, callback);
+                return model;
+            }
+            return model;
+        });
+    }
+
+    findModelByID(modelID) {
+        let model = null;
+        this.traverseModels(this.models, (subModel) => {
+            if (subModel.modelID === modelID) {
+                model = subModel;
+            }
+        });
+        return model;
+    }
+
+    findModelByMesh(meshObject) {
+        for (const model of this.models) {
+            if (model instanceof ThreeModel) {
+                if (model.meshObject === meshObject || model.meshObject.children.indexOf(meshObject) > -1) {
+                    return model;
+                }
+            } else if (model instanceof ThreeGroup) {
+                const res = model.findModelInGroupByMesh(meshObject);
+                if (res) {
+                    return res;
+                }
+            }
+        }
+        return null;
     }
 
     // use for canvas
@@ -564,26 +727,64 @@ class ModelGroup extends EventEmitter {
                 this.unselectAllModels();
                 break;
             case SELECTEVENT.UNSELECT_ADDSELECT:
-                this.unselectAllModels();
-                model = this.models.find(d => d.meshObject === intersect.object);
+                model = this.findModelByMesh(intersect.object);
+                if (model?.parent) {
+                    // Unselect if there is only one model in the group
+                    if (model.parent.children.length === 1 && model.parent.isSelected) {
+                        this.unselectAllModelsInGroup(model.parent);
+                        this.unselectAllModels();
+                        break;
+                    }
+                    this.unselectAllModelsInGroup(model.parent);
+                    this.unselectAllModels();
+                } else {
+                    this.unselectAllModels();
+                }
                 if (model) {
                     this.addModelToSelectedGroup(model);
                 }
                 break;
             case SELECTEVENT.ADDSELECT:
-                model = this.models.find(d => d.meshObject === intersect.object);
+                model = this.findModelByMesh(intersect.object);
                 if (model) {
+                    // prevent selected models outside group
+                    let isModelAcrossGroup = false;
+                    for (const selectedModel of this.selectedModelArray) {
+                        if (selectedModel.parent !== model.parent) {
+                            isModelAcrossGroup = true;
+                            break;
+                        }
+                    }
+                    if (isModelAcrossGroup) {
+                        this.unselectAllModels();
+                    }
                     // cannot select model and support
                     // cannot select multi support
-                    if (this.selectedModelArray.length && (this.selectedModelArray[0].supportTag !== model.supportTag || model.supportTag)) {
+                    if (this.selectedModelArray.length && (
+                        model instanceof ThreeModel && this.selectedModelArray[0] instanceof ThreeModel
+                    ) && (this.selectedModelArray[0].supportTag !== model.supportTag || model.supportTag)) {
                         break;
                     }
-                    this.addModelToSelectedGroup(model);
+                    // cannot select model and prime tower
+                    if (this.selectedModelArray.length && _.some(this.selectedModelArray, (item) => {
+                        return item.type !== model.type && (item.type === 'primeTower' || model.type === 'primeTower');
+                    })) {
+                        break;
+                    }
+                    // If all models in the group are selected, select group
+                    if (model.parent && this.selectedModelArray.length === model.parent.children.length - 1) {
+                        this.unselectAllModels();
+                        this.addModelToSelectedGroup(model.parent);
+                    } else {
+                        this.addModelToSelectedGroup(model);
+                    }
                 }
                 break;
             case SELECTEVENT.REMOVESELECT:
-                model = this.models.find(d => d.meshObject === intersect.object);
-                if (model) {
+                model = this.findModelByMesh(intersect.object);
+                if (model?.parent?.isSelected) {
+                    this.removeModelFromSelectedGroup(model.parent);
+                } else if (model?.isSelected) {
                     this.removeModelFromSelectedGroup(model);
                 }
                 break;
@@ -596,10 +797,10 @@ class ModelGroup extends EventEmitter {
     }
 
     addModelToSelectedGroup(model) {
-        if (!(model instanceof Model)) return;
-
+        if (!(model instanceof Model) || model.isSelected) return;
+        if (model.type === 'primeTower' && !model.visible) return;
         model.setSelected(true);
-        ThreeUtils.applyObjectMatrix(this.selectedGroup, new Matrix4().getInverse(this.selectedGroup.matrix));
+        ThreeUtils.applyObjectMatrix(this.selectedGroup, new Matrix4().copy(this.selectedGroup.matrix).invert());
         this.selectedModelArray = [...this.selectedModelArray, model];
 
         ThreeUtils.setObjectParent(model.meshObject, this.selectedGroup);
@@ -611,15 +812,23 @@ class ModelGroup extends EventEmitter {
         if (!this.selectedGroup.children.find(obj => obj === model.meshObject)) return;
 
         model.setSelected(false);
-        ThreeUtils.applyObjectMatrix(this.selectedGroup, new Matrix4().getInverse(this.selectedGroup.matrix));
+        ThreeUtils.applyObjectMatrix(this.selectedGroup, new Matrix4().copy(this.selectedGroup.matrix).invert());
         let parent = this.object;
         if (model.supportTag) { // support parent should be the target model
             parent = model.target.meshObject;
         }
+        if (model.parent) {
+            parent = model.parent.meshObject;
+        }
         ThreeUtils.setObjectParent(model.meshObject, parent);
         this.selectedModelArray = [];
         this.selectedGroup.children.forEach((meshObject) => {
-            const selectedModel = this.models.find(d => d.meshObject === meshObject);
+            let selectedModel = null;
+            this.traverseModels(this.models, (subModel) => {
+                if (subModel.meshObject === meshObject) {
+                    selectedModel = subModel;
+                }
+            });
             this.selectedModelArray.push(selectedModel);
         });
 
@@ -629,11 +838,11 @@ class ModelGroup extends EventEmitter {
     // refresh selected group matrix
     prepareSelectedGroup() {
         if (this.selectedModelArray.length === 1) {
-            ThreeUtils.applyObjectMatrix(this.selectedGroup, new Matrix4().getInverse(this.selectedGroup.matrix));
+            ThreeUtils.applyObjectMatrix(this.selectedGroup, new Matrix4().copy(this.selectedGroup.matrix).invert());
             ThreeUtils.liftObjectOnlyChildMatrix(this.selectedGroup);
             this.selectedGroup.uniformScalingState = this.selectedGroup.children[0].uniformScalingState;
         } else if (this.selectedModelArray.length > 1) {
-            // this.selectedGroup.uniformScalingState = true;
+            this.selectedGroup.uniformScalingState = true;
             const p = this.calculateSelectedGroupPosition(this.selectedGroup);
             // set selected group position need to remove children temporarily
             const children = [...this.selectedGroup.children];
@@ -649,14 +858,13 @@ class ModelGroup extends EventEmitter {
 
     selectAllModels() {
         this.selectedModelArray = [];
-
         this.models.forEach((model) => {
-            if (model.supportTag) return;
+            if (model.supportTag || model.type === 'primeTower') return;
             if (model.visible) {
                 this.addModelToSelectedGroup(model);
             }
         });
-
+        this.prepareSelectedGroup();
         this.modelChanged();
 
         return { // warning: this may not be correct
@@ -666,15 +874,33 @@ class ModelGroup extends EventEmitter {
         };
     }
 
-    unselectAllModels() {
+    unselectAllModelsInGroup(group) {
         this.selectedModelArray = [];
-        // this.selectedModelIDArray = [];
-        // this.selectedGroup.children.splice(0);
+        group.children.forEach((model) => {
+            this.removeModelFromSelectedGroup(model);
+        });
+    }
+
+    unselectAllModels() {
+        const cancelSelectedModels = this.selectedModelArray.slice(0);
+        this.selectedModelArray = [];
         if (this.headType === 'printing') {
             this.models.forEach((model) => {
+                if (model instanceof ThreeGroup) {
+                    model.children.forEach((subModel) => {
+                        this.removeModelFromSelectedGroup(subModel);
+                    });
+                }
                 this.removeModelFromSelectedGroup(model);
             });
         }
+        return {
+            recovery: () => {
+                cancelSelectedModels.forEach(model => {
+                    this.addModelToSelectedGroup(model);
+                });
+            }
+        };
     }
 
     arrangeAllModels() {
@@ -706,7 +932,7 @@ class ModelGroup extends EventEmitter {
     }
 
     duplicateSelectedModel(modelID) {
-        const modelsToCopy = this.selectedModelArray;
+        const modelsToCopy = _.filter(this.selectedModelArray, (model) => model.type !== 'primeTower');
         if (modelsToCopy.length === 0) return this._getEmptyState();
 
         // Unselect all models
@@ -715,7 +941,7 @@ class ModelGroup extends EventEmitter {
         modelsToCopy.forEach((model) => {
             const newModel = model.clone(this);
 
-            if (model.isThreeModel) {
+            if (model.isThreeModel || model instanceof ThreeGroup) {
                 newModel.stickToPlate();
                 newModel.modelName = this._createNewModelName(newModel);
                 newModel.meshObject.position.x = 0;
@@ -728,10 +954,10 @@ class ModelGroup extends EventEmitter {
                 newModel.meshObject.updateMatrix();
                 newModel.computeBoundingBox();
 
-                newModel.modelID = modelID || uuid.v4();
+                newModel.modelID = modelID || uuid();
             } else {
                 newModel.meshObject.addEventListener('update', this.onModelUpdate);
-                newModel.modelID = modelID || uuid.v4();
+                newModel.modelID = modelID || uuid();
                 newModel.computeBoundingBox();
                 newModel.updateTransformation({
                     positionX: 0,
@@ -752,7 +978,7 @@ class ModelGroup extends EventEmitter {
      * Copy action: copy selected models (simply save the objects without their current positions).
      */
     copy() {
-        this.clipboard = this.selectedModelArray.map(model => model.clone(this));
+        this.clipboard = this.selectedModelArray.filter((model) => model.type !== 'primeTower').map(model => model.type !== 'primeTower' && model.clone(this));
     }
 
     /**
@@ -784,11 +1010,12 @@ class ModelGroup extends EventEmitter {
                 newModel.meshObject.updateMatrix();
                 newModel.computeBoundingBox();
 
-                newModel.modelID = uuid.v4();
+                newModel.modelID = uuid();
 
                 this.models.push(newModel);
                 this.object.add(newModel.meshObject);
                 this.addModelToSelectedGroup(newModel);
+                this.updatePrimeTowerHeight();
             }
         });
 
@@ -806,6 +1033,10 @@ class ModelGroup extends EventEmitter {
 
         // todo
         return this.MOCK_MODEL;
+    }
+
+    isModelSelected(model) {
+        return this.selectedGroup.children.includes(model.meshObject);
     }
 
     getSelectedModelArray() {
@@ -846,7 +1077,13 @@ class ModelGroup extends EventEmitter {
     }
 
     autoRotateSelectedModel() {
-        const selected = this.getSelectedModelArray();
+        // const selected = this.getSelectedModelArray();
+        let selected = [];
+        if (this.getSelectedModelArray().length > 0) {
+            selected = this.getSelectedModelArray();
+        } else {
+            selected = this.getModels('primeTower');
+        }
         if (selected.length === 0) {
             return null;
         }
@@ -859,15 +1096,22 @@ class ModelGroup extends EventEmitter {
         return this.getState();
     }
 
-    scaleToFitSelectedModel(size) {
+
+    scaleToFitFromModel(size, offsetX = 0, offsetY = 0, models) {
+        models.forEach((model) => {
+            model.scaleToFit(size, offsetX, offsetY);
+            model.computeBoundingBox();
+        });
+
+        return this.getState();
+    }
+
+    scaleToFitSelectedModel(size, offsetX = 0, offsetY = 0) {
         const selected = this.getSelectedModelArray();
         if (selected.length === 0) {
             return null;
         }
-        selected.forEach((item) => {
-            item.scaleToFit(size);
-            item.computeBoundingBox();
-        });
+        this.scaleToFitFromModel(size, offsetX, offsetY, selected);
         this.prepareSelectedGroup();
         return this.getState();
     }
@@ -877,7 +1121,7 @@ class ModelGroup extends EventEmitter {
         if (selected.length === 0) {
             return null;
         }
-        ThreeUtils.applyObjectMatrix(this.selectedGroup, new Matrix4().getInverse(this.selectedGroup.matrix));
+        ThreeUtils.applyObjectMatrix(this.selectedGroup, new Matrix4().copy(this.selectedGroup.matrix).invert());
 
         selected.forEach((item) => {
             item.updateTransformation({
@@ -888,7 +1132,7 @@ class ModelGroup extends EventEmitter {
                 rotationY: 0,
                 rotationZ: 0
             });
-            item.stickToPlate();
+            item instanceof ThreeGroup && item.stickToPlate();
         });
         this.prepareSelectedGroup();
 
@@ -896,33 +1140,86 @@ class ModelGroup extends EventEmitter {
     }
 
     onModelTransform() {
-        // this.selectedModelIDArray.splice(0);
-        this.selectedModelArray.forEach((item) => {
-            // this.selectedModelIDArray.push(item.modelID);
-            item.onTransform();
-        });
-        const { sourceType, mode, transformation, boundingBox, originalName } = this.selectedModelArray[0];
-        return {
-            sourceType: sourceType,
-            originalName: originalName,
-            mode: mode,
-            selectedModelIDArray: this.selectedModelIDArray,
-            transformation: { ...transformation },
-            boundingBox, // only used in 3dp
-            hasModel: this.hasModel()
-        };
+        try {
+            // this.selectedModelIDArray.splice(0);
+            this.selectedModelArray.forEach((model) => {
+                if (model.parent && model.parent instanceof ThreeGroup) {
+                    model.parent.children.forEach(subModel => {
+                        subModel.onTransform();
+                    });
+                } else {
+                    model.onTransform();
+                }
+                // this.selectedModelIDArray.push(item.modelID);
+            });
+            const { sourceType, mode, transformation, boundingBox, originalName } = this.selectedModelArray[0];
+            return {
+                sourceType: sourceType,
+                originalName: originalName,
+                mode: mode,
+                selectedModelIDArray: this.selectedModelIDArray,
+                transformation: { ...transformation },
+                boundingBox, // only used in 3dp
+                hasModel: this.hasModel()
+            };
+        } catch (error) {
+            console.trace('onModelTransform error', error);
+            return {};
+        }
     }
 
     shouldApplyScaleToObjects(scaleX, scaleY, scaleZ) {
         return this.selectedGroup.children.every((meshObject) => {
             if (Math.abs(scaleX * meshObject.scale.x) < 0.01
-              || Math.abs(scaleY * meshObject.scale.y) < 0.01
-              || Math.abs(scaleZ * meshObject.scale.z) < 0.01
+                || Math.abs(scaleY * meshObject.scale.y) < 0.01
+                || Math.abs(scaleZ * meshObject.scale.z) < 0.01
             ) {
                 return false; // should disable
             }
             return true;
         });
+    }
+
+    updateModelsPositionBaseFirstModel(models) {
+        if (models && models.length > 0) {
+            const firstModel = models[0];
+            const otherModels = models.filter(d => d.meshObject !== firstModel.meshObject);
+            this.selectModelById(firstModel.modelID);
+            this.updateSelectedGroupTransformation({ positionZ: firstModel.originalPosition.z });
+            otherModels.forEach((model) => {
+                const newPosition = {
+                    positionX: model.originalPosition.x - firstModel.originalPosition.x + firstModel.transformation.positionX,
+                    positionY: model.originalPosition.y - firstModel.originalPosition.y + firstModel.transformation.positionY,
+                    positionZ: model.originalPosition.z,
+                };
+                this.selectModelById(model.modelID);
+                this.updateSelectedGroupTransformation(newPosition);
+            });
+            this.unselectAllModels();
+            models.forEach((item) => {
+                this.addModelToSelectedGroup(item);
+            });
+
+            this.modelChanged();
+        }
+        const newPosition = this.selectedGroup?.position;
+        return {
+            positionX: newPosition.x,
+            positionY: newPosition.y,
+        };
+    }
+
+    updateModelPositionByPosition(modelID, position) {
+        if (modelID) {
+            const model = this.models.find(d => d.modelID === modelID);
+            this.selectModelById(model.modelID);
+            this.updateSelectedGroupTransformation({
+                positionX: position.x,
+                positionY: position.y,
+                positionZ: position.z,
+            });
+            this.onModelAfterTransform();
+        }
     }
 
     /**
@@ -934,24 +1231,21 @@ class ModelGroup extends EventEmitter {
      *
      * TODO: Laser and CNC was moved to somewhere else.
      *
+     * TODO: Is there a need to update the transform of the model?
+     *
      * @param transformation
      */
-    updateSelectedGroupTransformation(transformation, newUniformScalingState) {
-        const { positionX, positionY, rotationX, rotationY, rotationZ, scaleX, scaleY, scaleZ, width, height, uniformScalingState } = transformation;
+    updateSelectedGroupTransformation(transformation, newUniformScalingState = this.selectedGroup.uniformScalingState, isAllRotate = false) {
+        const { positionX, positionY, positionZ, rotationX, rotationY, rotationZ, scaleX, scaleY, scaleZ, uniformScalingState } = transformation;
         const shouldUniformScale = newUniformScalingState ?? this.selectedGroup.uniformScalingState;
-        // todo, width and height use for 2d
-        if (width !== undefined) {
-            this.selectedGroup.width = width;
-        }
-        if (height !== undefined) {
-            this.selectedGroup.height = height;
-        }
-
         if (positionX !== undefined) {
             this.selectedGroup.position.setX(positionX);
         }
         if (positionY !== undefined) {
             this.selectedGroup.position.setY(positionY);
+        }
+        if (positionZ !== undefined) {
+            this.selectedGroup.position.setZ(positionZ);
         }
         // Note that this is new value, but not a proportion, not to change pls.
         if (shouldUniformScale) {
@@ -1016,19 +1310,50 @@ class ModelGroup extends EventEmitter {
             if (this.selectedGroup.children.length === 1) {
                 this.selectedGroup.children[0].uniformScalingState = uniformScalingState;
             } else {
-                this.selectedGroup.children.forEach((item) => {
-                    item.uniformScalingState = uniformScalingState;
-                });
+                // multi models scaling is wrong currently, disable it now
+                // this.selectedGroup.children.forEach((item) => {
+                //     item.uniformScalingState = uniformScalingState;
+                // });
             }
         }
         if (rotationX !== undefined) {
-            this.selectedGroup.rotation.x = rotationX;
+            if (isAllRotate) {
+                this.selectedGroup.rotation.x = rotationX;
+            } else {
+                if (this.selectedModelArray.length > 1) {
+                    this.selectedGroup.children.forEach((meshItem) => {
+                        meshItem.rotation.x = rotationX;
+                    });
+                } else {
+                    this.selectedGroup.rotation.x = rotationX;
+                }
+            }
         }
         if (rotationY !== undefined) {
-            this.selectedGroup.rotation.y = rotationY;
+            if (isAllRotate) {
+                this.selectedGroup.rotation.y = rotationY;
+            } else {
+                if (this.selectedModelArray.length > 1) {
+                    this.selectedGroup.children.forEach((meshItem) => {
+                        meshItem.rotation.y = rotationY;
+                    });
+                } else {
+                    this.selectedGroup.rotation.y = rotationY;
+                }
+            }
         }
         if (rotationZ !== undefined) {
-            this.selectedGroup.rotation.z = rotationZ;
+            if (isAllRotate) {
+                this.selectedGroup.rotation.z = rotationZ;
+            } else {
+                if (this.selectedModelArray.length > 1) {
+                    this.selectedGroup.children.forEach((meshItem) => {
+                        meshItem.rotation.z = rotationZ;
+                    });
+                } else {
+                    this.selectedGroup.rotation.z = rotationZ;
+                }
+            }
         }
         this.selectedGroup.updateMatrix();
         this.selectedGroup.shouldUpdateBoundingbox = false;
@@ -1038,36 +1363,49 @@ class ModelGroup extends EventEmitter {
             model.generateSupportGeometry();
             revert();
         }
-
         this.modelChanged();
         return this.getState();
     }
 
+    // on 3dp scale
+    updateSelectedGroupModelsVectorUv() {
+        this.selectedGroup.children.forEach((mesh) => {
+            if (mesh.geometry) {
+                const newUv = calculateUvVector(this.selectedGroup.scale, mesh);
+                mesh.geometry.setAttribute('uv', newUv);
+            }
+        });
+    }
+
     // model transformation triggered by controls
     // Note: the function is only useful for 3D object operations on Canvas
-    onModelAfterTransform() {
+    onModelAfterTransform(shouldStickToPlate = true) {
         const selectedModelArray = this.selectedModelArray;
+        const { recovery } = this.unselectAllModels();
+        // update model's boundingbox which has supports
         selectedModelArray.forEach((selected) => {
-            if (selected.sourceType === '3d') {
-                selected.stickToPlate();
-            }
-            if (selected.supportTag && selected.isSelected) {
-                selected.meshObject.parent.position.setZ(0);
-                selected.meshObject.parent.updateMatrix();
+            if (selected.sourceType === '3d' && shouldStickToPlate) {
+                if (selected.supportTag && selected.isSelected) {
+                    selected.meshObject.parent.position.setZ(0);
+                    selected.meshObject.parent.updateMatrix();
+                    this.removeModelFromSelectedGroup(selected);
+                    this.stickToPlateAndCheckOverstepped(selected.target);
+                    this.addModelToSelectedGroup(selected);
+                } else {
+                    this.stickToPlateAndCheckOverstepped(selected);
+                    if (selected.parent && selected.parent instanceof ThreeGroup) {
+                        this.stickToPlateAndCheckOverstepped(selected.parent);
+                        selected.parent.computeBoundingBox();
+                    }
+                }
             }
             selected.computeBoundingBox();
         });
         this.selectedGroup.shouldUpdateBoundingbox = false;
 
         this.prepareSelectedGroup();
-        // update model's boundingbox which has supports
-        selectedModelArray.forEach((selected) => {
-            if (selected.supportTag && selected.isSelected) {
-                this.removeModelFromSelectedGroup(selected);
-                this.stickToPlateAndCheckOverstepped(selected.target);
-                this.addModelToSelectedGroup(selected);
-            }
-        });
+        this.updatePrimeTowerHeight();
+        recovery();
 
         if (selectedModelArray.length === 0) {
             return {};
@@ -1097,6 +1435,29 @@ class ModelGroup extends EventEmitter {
         this.object.visible = true;
     }
 
+    arrangeOutsidePlate(model, size) {
+        model.computeBoundingBox();
+        const x = size.x / 2 + (model.boundingBox.max.x - model.boundingBox.min.x) / 2;
+        let y = -size.y / 2;
+        const stepCount = 1;
+
+        const modelBox3Clone = model.boundingBox.clone();
+        modelBox3Clone.translate(new Vector3(x, y, 0));
+        const box3Arr = [];
+        for (const m of this.getModels()) {
+            m.stickToPlate();
+            m.computeBoundingBox();
+            box3Arr.push(m.boundingBox);
+        }
+        while (1) {
+            if (!this._isBox3IntersectOthers(modelBox3Clone, box3Arr)) {
+                return { x, y };
+            }
+            y += stepCount;
+            modelBox3Clone.translate(new Vector3(0, 1, 0));
+        }
+    }
+
     _computeAvailableXY(model, arrangedModels) {
         if (!arrangedModels) {
             arrangedModels = this.getModels();
@@ -1110,6 +1471,7 @@ class ModelGroup extends EventEmitter {
         const box3Arr = [];
         for (const m of arrangedModels) {
             m.stickToPlate();
+            m.computeBoundingBox();
             box3Arr.push(m.boundingBox);
         }
 
@@ -1193,12 +1555,12 @@ class ModelGroup extends EventEmitter {
         let isOverstepped = false;
         // TODO: Using 'computeBoundingBox' here will make it's boundingBox uncorrect
         // model.computeBoundingBox();
-        isOverstepped = this._bbox && !this._bbox.containsBox(model.boundingBox);
+        isOverstepped = this._bbox && model.boundingBox && !this._bbox.containsBox(model.boundingBox);
         return isOverstepped;
     }
 
     hasModel() {
-        return this.getModels().filter(v => v.visible).length > 0;
+        return this.getModels().filter(v => v.visible && v.type !== 'primeTower').length > 0;
     }
 
     // include visible and hidden model
@@ -1291,6 +1653,12 @@ class ModelGroup extends EventEmitter {
      * @returns {Model}
      */
     addModel(modelInfo) {
+        if (modelInfo.sourceType === '3d' && modelInfo.isGroup) {
+            const group = new ThreeGroup(modelInfo, this);
+            group.updateTransformation(modelInfo.transformation);
+            this.groupsChildrenMap.set(group, modelInfo.children.map(item => item.modelID));
+            return group;
+        }
         if (!modelInfo.modelName) {
             modelInfo.modelName = this._createNewModelName({
                 sourceType: modelInfo.sourceType,
@@ -1311,31 +1679,68 @@ class ModelGroup extends EventEmitter {
 
         model.computeBoundingBox();
 
-        // add to group and select
-        this.models.push(model);
-        // todo, use this to refresh obj list
-        this.models = [...this.models];
-        this.object.add(model.meshObject);
         if (model.sourceType === '3d') {
-            this.selectModelById(model.modelID);
+            if (modelInfo.parentModelID) {
+                // Updating groupsChildrenMap value to 'model'
+                this.groupsChildrenMap.forEach((subModelIDs, group) => {
+                    if (modelInfo.parentModelID === group.modelID) {
+                        const newSubModelIDs = subModelIDs.map(id => {
+                            if (id === model.modelID) {
+                                return model;
+                            }
+                            return id;
+                        });
+                        this.groupsChildrenMap.set(group, newSubModelIDs);
+                    }
+                });
+            } else {
+                // add to group and select
+                model.stickToPlate();
+                this.models.push(model);
+                // todo, use this to refresh obj list
+                this.models = [...this.models];
+                this.object.add(model.meshObject);
+
+                this.selectModelById(model.modelID);
+            }
+        } else {
+            // add to group and select
+            this.models.push(model);
+            // todo, use this to refresh obj list
+            this.models = [...this.models];
+            this.object.add(model.meshObject);
         }
+
         this.emit('add', model);
         // refresh view
         this.modelChanged();
-
+        modelInfo.sourceType === '3d' && this.updatePrimeTowerHeight();
         return model;
     }
 
+    /**
+     * deprecated
+     */
     hasSupportModel() {
         return !!this.models.find(i => i.supportTag === true);
     }
 
+    /**
+     * deprecated
+     */
     isSupportSelected() {
         return this.selectedModelArray.length === 1 && this.selectedModelArray.every((model) => {
             return model.supportTag;
         });
     }
 
+    isPrimeTowerSelected() {
+        return this.selectedModelArray.length === 1 && this.selectedModelArray[0].type === 'primeTower';
+    }
+
+    /**
+     * deprecated
+     */
     addSupportOnSelectedModel(defaultSupportSize) {
         if (this.selectedModelArray.length !== 1) {
             return null;
@@ -1391,13 +1796,35 @@ class ModelGroup extends EventEmitter {
         return model;
     }
 
+    /**
+     * deprecated
+     */
     saveSupportModel(model) {
         model.generateSupportGeometry();
         if (model.isInitSupport) {
             this.removeModel(model);
         } else {
+            if (model.target instanceof ThreeGroup) {
+                const targetInGroup = model.target.intersectSupportTargetMeshInGroup(model);
+                if (targetInGroup) {
+                    model.target = targetInGroup;
+                }
+            }
             ThreeUtils.setObjectParent(model.meshObject, model.target.meshObject);
         }
+    }
+
+    /**
+     * deprecated
+     */
+    getSupports() {
+        const supports = [];
+        this.traverseModels(this.models, (model) => {
+            if (model.supportTag) {
+                supports.push(model);
+            }
+        });
+        return supports;
     }
 
     modelChanged() {
@@ -1432,15 +1859,19 @@ class ModelGroup extends EventEmitter {
     _createNewModelName(model) {
         let baseName = '';
         if (model.sourceType === '3d') {
-            baseName = model.originalName;
+            if (model instanceof ThreeGroup) {
+                baseName = 'Group';
+            } else {
+                baseName = model.originalName;
+            }
         } else {
             const { config } = model;
             const isText = (config && config.svgNodeName === 'text');
             const isShape = (model.mode === 'vector' && config && config.svgNodeName !== 'image');
             if (isText) {
-                baseName = 'Text';
+                baseName = i18n._('key-2D_model_basename-Text');
             } else if (isShape) {
-                baseName = 'Shape';
+                baseName = i18n._('key-2D_model_basename-Shape');
             } else {
                 baseName = model.originalName;
             }
@@ -1453,9 +1884,17 @@ class ModelGroup extends EventEmitter {
                 name = `${baseName} ${count.toString()}`;
             } else {
                 if (count === 1) {
-                    name = baseName;
+                    if (model instanceof ThreeGroup) {
+                        name = `${baseName} ${count.toString()}`;
+                    } else {
+                        name = baseName;
+                    }
                 } else {
-                    name = `${baseName} (${count.toString()})`;
+                    if (model instanceof ThreeGroup) {
+                        name = `${baseName} ${count.toString()}`;
+                    } else {
+                        name = `${baseName} (${count.toString()})`;
+                    }
                 }
             }
             if (!this.getModelByModelName(name)) {
@@ -1495,25 +1934,38 @@ class ModelGroup extends EventEmitter {
         this.modelChanged();
     }
 
+    setDisplayType(displayedType) {
+        this.models.forEach(model => {
+            model.updateDisplayedType(displayedType);
+        });
+    }
+
     stickToPlateAndCheckOverstepped(model) {
-        model.computeBoundingBox();
-        model.stickToPlate();
-        const overstepped = this._checkOverstepped(model);
-        model.setOversteppedAndSelected(overstepped, model.isSelected);
+        if (model.sourceType === '3d') {
+            model.computeBoundingBox();
+            model.stickToPlate();
+            const overstepped = this._checkOverstepped(model);
+            model.setOversteppedAndSelected(overstepped, model.isSelected);
+        }
     }
 
     analyzeSelectedModelRotationAsync() {
         return new Promise((resolve, reject) => {
             if (this.selectedModelArray.length === 1) {
                 const model = this.selectedModelArray[0];
-                if (!model.convexGeometry) {
-                    this.once('set-convex', () => {
-                        const result = this.analyzeSelectedModelRotation();
-                        resolve(result);
-                    });
-                } else {
+                if (model instanceof ThreeGroup) {
                     const result = this.analyzeSelectedModelRotation();
                     resolve(result);
+                } else {
+                    if (!model.convexGeometry) {
+                        this.once('set-convex', () => {
+                            const result = this.analyzeSelectedModelRotation();
+                            resolve(result);
+                        });
+                    } else {
+                        const result = this.analyzeSelectedModelRotation();
+                        resolve(result);
+                    }
                 }
             } else {
                 reject();
@@ -1555,15 +2007,26 @@ class ModelGroup extends EventEmitter {
                     // Fix Z-fighting
                     // https://sites.google.com/site/threejstuts/home/polygon_offset
                     // https://stackoverflow.com/questions/40328722/how-can-i-solve-z-fighting-using-three-js
-                    const material = new MeshBasicMaterial({ color: 0x1890FF, depthWrite: false, transparent: true, opacity: 0.3, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -5 });
+                    const material = new MeshBasicMaterial({
+                        color: 0x1890FF,
+                        depthWrite: false,
+                        transparent: true,
+                        opacity: 0.3,
+                        polygonOffset: true,
+                        polygonOffsetFactor: -1,
+                        polygonOffsetUnits: -5
+                    });
                     const mesh = new Mesh(geometry, material);
                     mesh.userData = {
                         index: rowInfo.faceId
                     };
                     mesh.renderOrder = 9999999999;
+                    group.userData = {
+                        isRotationFace: true
+                    };
                     group.add(mesh);
-                    model.meshObject.add(group);
                 });
+                model.meshObject.add(group);
             }
             return tableResult;
         }
@@ -1586,7 +2049,9 @@ class ModelGroup extends EventEmitter {
         if (this.selectedModelArray.length === 1) {
             const model = this.selectedModelArray[0];
             for (let i = model.meshObject.children.length - 1; i >= 0; i--) {
-                model.meshObject.remove(model.meshObject.children[i]);
+                if (model.meshObject.children[i].userData.isRotationFace) {
+                    model.meshObject.remove(model.meshObject.children[i]);
+                }
             }
             for (let i = this.selectedModelConvexMeshGroup.children.length - 1; i >= 0; i--) {
                 this.selectedModelConvexMeshGroup.remove(this.selectedModelConvexMeshGroup.children[i]);
@@ -1595,6 +2060,501 @@ class ModelGroup extends EventEmitter {
             return this.selectedModelConvexMeshGroup;
         }
         return null;
+    }
+
+    _flattenGroups(modelsArray) {
+        const ungroupedModels = [];
+        modelsArray.forEach(model => {
+            if (model instanceof ThreeGroup) {
+                if (model.visible) {
+                    const children = model.disassemble();
+                    ungroupedModels.push(...children);
+                }
+            } else {
+                ungroupedModels.push(model);
+            }
+        });
+        return ungroupedModels;
+    }
+
+    recoveryGroup(group, ...models) {
+        group.add(models);
+        this.models = this.models.filter(model => {
+            return !model.parent || model.parent.modelID !== group.modelID;
+        });
+        return this.getState();
+    }
+
+    group() {
+        const selectedModelArray = this.selectedModelArray.slice(0);
+        this.unselectAllModels();
+
+        const group = new ThreeGroup({}, this);
+        // check visible models or groups
+        if (selectedModelArray.some(model => model.visible)) {
+            // insert group to the first model position in selectedModelArray
+            selectedModelArray.forEach(model => {
+                if (model.parent && model.parent instanceof ThreeGroup) {
+                    const index = model.parent.children.findIndex(subModel => subModel.modelID === model.modelID);
+                    model.parent.children.splice(index, 1);
+                    this.models.push(model);
+                    ThreeUtils.setObjectParent(model.meshObject, model.parent.meshObject.parent);
+                    model.parent.computeBoundingBox();
+                    model.parent.updateGroupExtruder();
+                }
+            });
+
+            const indexesOfSelectedModels = selectedModelArray.map((model) => {
+                return this.models.indexOf(model);
+            });
+            const modelsToGroup = this._flattenGroups(selectedModelArray);
+            group.modelName = this._createNewModelName(group);
+            group.add(modelsToGroup);
+            const insertIndex = Math.min(...indexesOfSelectedModels);
+            this.models.splice(insertIndex, 0, group);
+            this.models = this.models.filter(model => selectedModelArray.indexOf(model) === -1);
+
+            this.object.add(group.meshObject);
+            group.stickToPlate();
+            group.meshObject.updateMatrix();
+            group.computeBoundingBox();
+            group.onTransform();
+            this.addModelToSelectedGroup(group);
+            this.updatePrimeTowerHeight();
+        }
+        return {
+            newGroup: group,
+            modelState: this.getState()
+        };
+    }
+
+    canMerge() {
+        return this.selectedModelArray?.length > 1 && !this.selectedModelArray.some(model => model instanceof ThreeGroup);
+    }
+
+    canGroup() {
+        return this.selectedModelArray.some(model => {
+            return model.visible && model.type !== 'primeTower';
+        });
+    }
+
+    canUngroup() {
+        return this.selectedModelArray.some(model => model instanceof ThreeGroup && model.visible);
+    }
+
+    ungroup({ autoStickToPlate } = { autoStickToPlate: true }) {
+        const selectedModelArray = this.selectedModelArray.slice(0);
+        this.unselectAllModels();
+        // only visible groups can ungroup, others keep selected
+        if (selectedModelArray.some(model => model instanceof ThreeGroup && model.visible)) {
+            const ungroupedModels = [];
+            selectedModelArray.forEach(model => {
+                if (model instanceof ThreeGroup) {
+                    if (model.visible) {
+                        const insertIndex = this.models.indexOf(model);
+                        this.models.splice(insertIndex, 1);
+                        const children = model.disassemble();
+                        ungroupedModels.push(...children);
+                        this.models.splice(insertIndex, 0, ...children);
+                    }
+                } else {
+                    ungroupedModels.push(model);
+                }
+            });
+
+            ungroupedModels.forEach(model => {
+                this.addModelToSelectedGroup(model);
+                autoStickToPlate && model.stickToPlate();
+            });
+        }
+        this.updatePrimeTowerHeight();
+        return this.getState();
+    }
+
+    // prime tower
+    initPrimeTower(initHeight = 0.1, transformation) {
+        const model = new PrimeTowerModel(initHeight, this, transformation);
+        return model;
+    }
+
+    updatePrimeTowerHeight() {
+        let maxHeight = 0.1;
+        const maxBoundingBoxHeight = this._bbox?.max.z;
+        this.models.forEach(modelItem => {
+            if (modelItem.headType === HEAD_PRINTING && modelItem.type !== 'primeTower' && !modelItem.supportTag) {
+                const modelItemHeight = modelItem.boundingBox?.max.z - modelItem.boundingBox?.min.z;
+                maxHeight = Math.max(maxHeight, modelItemHeight);
+            }
+        });
+        if (typeof this.primeTowerHeightCallback === 'function') {
+            this.primeTowerHeightCallback(Math.min(maxHeight, maxBoundingBoxHeight));
+        }
+    }
+
+    // model support
+    generateSupportMesh(geometry, parentMesh) {
+        const material = new MeshBasicMaterial({
+            side: DoubleSide,
+            transparent: true,
+            opacity: 0.5,
+            color: 0x6485AB,
+            depthWrite: false,
+            polygonOffset: true,
+            polygonOffsetFactor: -1,
+            polygonOffsetUnits: -5
+        });
+        const mesh = new Mesh(geometry, material);
+        mesh.renderOrder = 99999;
+        mesh.applyMatrix4(parentMesh.matrixWorld.clone().invert());
+        return mesh;
+    }
+
+    filterModelsCanAttachSupport(models = this.models) {
+        const modelsToAddSupport = [];
+        this.traverseModels(models, (subModel) => {
+            if (subModel instanceof ThreeModel && subModel.canAttachSupport && subModel.visible && subModel.type !== 'primeTower') {
+                modelsToAddSupport.push(subModel);
+            }
+        });
+        return modelsToAddSupport;
+    }
+
+    getModelsAttachedSupport(defaultSelectAllModels = true) {
+        if (defaultSelectAllModels) {
+            return this.filterModelsCanAttachSupport(this.models);
+        } else {
+            return this.filterModelsCanAttachSupport(this.selectedModelArray);
+        }
+    }
+
+    clearAllSupport(models) {
+        models.forEach(model => {
+            model.meshObject.clear();
+            model.supportFaceMarks = [];
+            model.stickToPlate();
+        });
+    }
+
+    startEditSupportArea() {
+        const models = this.getModelsAttachedSupport();
+        models.forEach((model) => {
+            model.tmpSupportMesh = model.meshObject.children[0];
+            model.meshObject.clear();
+            // change color
+            model.isEditingSupport = true;
+            const colors = [];
+            if (!model.supportFaceMarks || model.supportFaceMarks.length === 0) {
+                const count = model.meshObject.geometry.getAttribute('position').count;
+                model.supportFaceMarks = new Array(count / 3).fill(0);
+            }
+
+            const bufferGeometry = model.meshObject.geometry;
+            const clone = bufferGeometry.clone();
+            clone.applyMatrix4(model.meshObject.matrixWorld.clone());
+            const normals = clone.getAttribute('normal').array;
+            const positions = clone.getAttribute('position').array;
+            const zUp = new Vector3(0, 0, 1);
+            for (let i = 0, j = 0; i < normals.length; i += 9, j++) {
+                const normal = new Vector3(normals[i], normals[i + 1], normals[i + 2]);
+                const angleN = normal.angleTo(zUp) / Math.PI * 180;
+                const averageZOfFace = (positions[i + 2] + positions[i + 5] + positions[i + 8]) / 3;
+                // prevent to add marks to the faces attached to XOY plane
+                if (angleN > (90 + EPSILON) && averageZOfFace > 0.01) {
+                    model.supportFaceMarks[j] = model.supportFaceMarks[j] || AVAIL;
+                }
+            }
+            model.supportFaceMarks.forEach((mark) => {
+                switch (mark) {
+                    case NONE: colors.push(...SUPPORT_UNAVAIL_AREA_COLOR, ...SUPPORT_UNAVAIL_AREA_COLOR, ...SUPPORT_UNAVAIL_AREA_COLOR); break;
+                    case FACE: colors.push(...SUPPORT_ADD_AREA_COLOR, ...SUPPORT_ADD_AREA_COLOR, ...SUPPORT_ADD_AREA_COLOR); break;
+                    case AVAIL: colors.push(...SUPPORT_AVAIL_AREA_COLOR, ...SUPPORT_AVAIL_AREA_COLOR, ...SUPPORT_AVAIL_AREA_COLOR); break;
+                    default: break;
+                }
+            });
+            model.meshObject.geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
+            model.originalGeometry = model.meshObject.geometry.clone();
+            // this function call produce side effects on geometry, need to reset geometry, otherwise support will be incorrect
+            model.meshObject.geometry.computeBoundsTree();
+            model.meshObject.userData = {
+                ...model.meshObject.userData,
+                canSupport: true
+            };
+            model.setSelected();
+        });
+        this.modelChanged();
+
+        if (this.brushMesh) {
+            this.object.parent.add(this.brushMesh);
+        }
+    }
+
+    finishEditSupportArea(shouldApplyChanges) {
+        const models = this.getModelsAttachedSupport();
+        this.object.parent.remove(this.brushMesh);
+        models.forEach(model => {
+            if (shouldApplyChanges) {
+                const colors = model.meshObject.geometry.getAttribute('color').array;
+                const supportFaceMarks = [];
+                for (let i = 0, j = 0; i < colors.length; i += 9, j++) {
+                    // determine the support face by checking RGB value
+                    const isSupportArea = colors.slice(i, i + 9).some(color => {
+                        return Math.abs(color - SUPPORT_ADD_AREA_COLOR[0]) < EPSILON;
+                    });
+                    supportFaceMarks[j] = isSupportArea ? FACE : NONE;
+                }
+                model.supportFaceMarks = supportFaceMarks;
+            } else {
+                // show original support mesh
+                model.meshObject.add(model.tmpSupportMesh);
+                model.tmpSupportMesh = null;
+            }
+            model.meshObject.geometry.disposeBoundsTree();
+            model.meshObject.geometry.copy(model.originalGeometry);
+            model.meshObject.geometry.deleteAttribute('color');
+            model.isEditingSupport = false;
+            model.setSelected();
+        });
+        this.modelChanged();
+        return models;
+    }
+
+    setSupportBrushRadius(radius) {
+        let position = new Vector3(0, 0, 0);
+        if (this.brushMesh) {
+            position = this.brushMesh.position.clone();
+            this.object.parent.remove(this.brushMesh);
+        }
+        const brushGeometry = new SphereBufferGeometry(radius, 40, 40);
+        const brushMaterial = new MeshStandardMaterial({
+            color: 0xEC407A,
+            roughness: 0.75,
+            metalness: 0,
+            transparent: true,
+            opacity: 0.5,
+            premultipliedAlpha: true,
+            emissive: 0xEC407A,
+            emissiveIntensity: 0.5,
+        });
+        this.brushMesh = new Mesh(brushGeometry, brushMaterial);
+        this.brushMesh.name = 'brushMesh';
+        this.brushMesh.position.copy(position);
+        this.object.parent.add(this.brushMesh);
+    }
+
+    moveSupportBrush(raycastResult) {
+        this.brushMesh.position.copy(raycastResult[0].point);
+    }
+
+    applySupportBrush(raycastResult, applySupportBrush) {
+        this.moveSupportBrush(raycastResult);
+        const target = raycastResult.find(result => result.object.userData.canSupport);
+        if (target) {
+            const targetMesh = target.object;
+            const geometry = targetMesh.geometry;
+            const bvh = geometry.boundsTree;
+            if (bvh) {
+                const inverseMatrix = new Matrix4();
+                inverseMatrix.copy(targetMesh.matrixWorld).invert();
+
+                const sphere = new Sphere();
+                sphere.center.copy(this.brushMesh.position).applyMatrix4(inverseMatrix);
+                sphere.radius = this.brushMesh.geometry.parameters.radius;
+
+                const indices = [];
+                const tempVec = new Vector3();
+                bvh.shapecast({
+                    intersectsBounds: box => {
+                        const intersects = sphere.intersectsBox(box);
+                        const { min, max } = box;
+                        if (intersects) {
+                            for (let x = 0; x <= 1; x++) {
+                                for (let y = 0; y <= 1; y++) {
+                                    for (let z = 0; z <= 1; z++) {
+                                        tempVec.set(
+                                            x === 0 ? min.x : max.x,
+                                            y === 0 ? min.y : max.y,
+                                            z === 0 ? min.z : max.z
+                                        );
+                                        if (!sphere.containsPoint(tempVec)) {
+                                            return INTERSECTED;
+                                        }
+                                    }
+                                }
+                            }
+                            return CONTAINED;
+                        }
+                        return intersects ? INTERSECTED : NOT_INTERSECTED;
+                    },
+                    intersectsTriangle: (tri, i, contained) => {
+                        if (contained || tri.intersectsSphere(sphere)) {
+                            const i3 = 3 * i;
+                            indices.push(i3, i3 + 1, i3 + 2);
+                        }
+                        return false;
+                    }
+                });
+                const colorAttr = geometry.getAttribute('color');
+                const indexAttr = geometry.index;
+                let color;
+                if (applySupportBrush === 'add') {
+                    color = SUPPORT_ADD_AREA_COLOR;
+                } else if (applySupportBrush === 'remove') {
+                    color = SUPPORT_AVAIL_AREA_COLOR;
+                }
+                for (let i = 0, l = indices.length; i < l; i++) {
+                    const i2 = indexAttr.getX(indices[i]);
+                    if (Math.abs(colorAttr.getX(i2) - SUPPORT_AVAIL_AREA_COLOR[0]) < EPSILON || Math.abs(colorAttr.getX(i2) - SUPPORT_ADD_AREA_COLOR[0]) < EPSILON) {
+                        colorAttr.setX(i2, color[0]);
+                        colorAttr.setY(i2, color[1]);
+                        colorAttr.setZ(i2, color[2]);
+                    }
+                }
+                colorAttr.needsUpdate = true;
+            }
+        }
+    }
+
+    checkIfOverrideSupport() {
+        const selectedAvailModels = this.getModelsAttachedSupport(false);
+        const availModels = selectedAvailModels.length > 0 ? selectedAvailModels : this.getModelsAttachedSupport();
+        return availModels.some(model => {
+            if (model.supportFaceMarks) {
+                return model.supportFaceMarks.indexOf(1) > -1;
+            }
+            return false;
+        });
+    }
+
+    computeSupportArea(models, angle) {
+        // group is not considered
+        models.forEach(model => {
+            model.meshObject.updateMatrixWorld();
+            const bufferGeometry = model.meshObject.geometry;
+            const clone = bufferGeometry.clone();
+            clone.applyMatrix4(model.meshObject.matrixWorld.clone());
+
+            const positions = clone.getAttribute('position').array;
+            const normals = clone.getAttribute('normal').array;
+
+            // this will cause main thread stucked for a long time
+            const supportFaceMarks = new Array(positions.length / 9).fill(NONE);
+            // const downFaces = new Array(supportFaceMarks.length).fill(false);
+            const normalVectors = new Array(supportFaceMarks.length).fill(false);
+            // calculate faces
+            const zDown = new Vector3(0, 0, -1);
+            for (let i = 0, index = 0; i < normals.length; i += 9, index++) {
+                const normal = new Vector3(normals[i], normals[i + 1], normals[i + 2]);
+                normalVectors[index] = normal;
+
+                const angleN = normal.angleTo(zDown) / Math.PI * 180;
+                // make sure marks added to downward faces
+                // if (angleN < 90) {
+                //     downFaces[index] = true;
+                // }
+                const averageZOfFace = (positions[i + 2] + positions[i + 5] + positions[i + 8]) / 3;
+                // prevent to add marks to the faces attached to XOY plane
+                if ((90 - angleN) > (angle + EPSILON) && averageZOfFace > 0.01) {
+                    supportFaceMarks[index] = FACE;
+                }
+            }
+            // for (let i = 0; i < normalVectors.length; i++) {
+            //     const normal = normalVectors[i];
+            //     const angleN = normal.angleTo(zUp) / Math.PI * 180;
+            //     console.log(angleN);
+            //     if (angleN < 90) {
+            //         downFaces[i] = true;
+            //         if (angleN <= angle) {
+            //             supportFaceMarks[i] = FACE;
+            //         }
+            //     }
+            // }
+
+            // calculate points
+            // const points = new Map();
+            // for (let i = 0, index = 0; i < positions.length; i += 3) {
+            //     index = Math.floor(i / 9);
+            //     const key = `${positions[i]}-${positions[i + 1]}-${positions[i + 2]}`;
+            //     if (points.has(key)) {
+            //         const value = points.get(key);
+            //         value.faceIds.push(index);
+            //     } else {
+            //         points.set(key, {
+            //             faceIds: [index],
+            //             isSupport: true,
+            //             normal: new Vector3(0, 0, 0)
+            //         });
+            //     }
+            // }
+            // for (let i = 0, index = 0; i < positions.length; i += 9, index++) {
+            //     if (downFaces[index] && supportFaceMarks[index] === NONE) {
+            //         const p1 = new Vector3(positions[i], positions[i + 1], positions[i + 2]);
+            //         const p2 = new Vector3(positions[i + 3], positions[i + 4], positions[i + 5]);
+            //         const p3 = new Vector3(positions[i + 6], positions[i + 7], positions[i + 8]);
+
+            //         const orderedPoints = ([p1, p2, p3].sort((a, b) => a.z - b.z));
+            //         orderedPoints.forEach((point, j) => {
+            //             const value = points.get(`${point.x}-${point.y}-${point.z}`);
+            //             if (j === 0) {
+            //                 value.normal.add(normalVectors[index]);
+            //             } else {
+            //                 value.isSupport = false;
+            //             }
+            //         });
+            //     }
+            // }
+            // points.forEach((value) => {
+            //     if (value.isSupport && ((value.normal.angleTo(zUp) / Math.PI * 180) > 90)) {
+            //         value.faceIds.forEach(faceId => {
+            //             supportFaceMarks[faceId] = POINT;
+            //         });
+            //     }
+            // });
+
+            // calculate lines
+            // const lines = new Map<string, PointInfo>();
+            // for (let i = 0, index = 0; i < positions.length; i += 9, index++) {
+            //     const keyP1 = `${positions[i]}-${positions[i + 1]}-${positions[i + 2]}`;
+            //     const keyP2 = `${positions[i + 3]}-${positions[i + 4]}-${positions[i + 5]}`;
+            //     const keyP3 = `${positions[i + 6]}-${positions[i + 7]}-${positions[i + 8]}`;
+
+            //     const line12 = [keyP1, keyP2];
+            //     const line13 = [keyP1, keyP3];
+            //     const line23 = [keyP2, keyP3];
+
+            //     const edges = [line12, line13, line23];
+            //     edges.forEach(line => {
+            //         if (lines.has(line.join())) {
+            //             const value = lines.get(key);
+            //             value.faceIds.push(index);
+            //         } else if (lines.has(line.reverse().join())) {
+
+            //         } else {
+            //             lines.set(key, {
+            //                 faceIds: [index],
+            //                 isSupport: true,
+            //                 normal: new Vector3(0, 0, 0)
+            //             });
+            //         }
+            //     });
+            // }
+
+            model.supportFaceMarks = supportFaceMarks;
+        });
+        return models;
+    }
+
+    isSelectedModelAllVisible() {
+        if (this.selectedModelArray.length === 0) {
+            return false;
+        }
+        return this.selectedModelArray.every(model => {
+            if (!model.visible || model.type === 'primeTower') {
+                return false;
+            } else if (model instanceof ThreeGroup) {
+                return model.children.every(subModel => subModel.visible);
+            }
+            return true;
+        });
     }
 }
 

@@ -7,8 +7,8 @@
 
 import noop from 'lodash/noop';
 import React, { PureComponent } from 'react';
-import { isNil } from 'lodash';
-import { Vector3, PerspectiveCamera, Scene, Group, HemisphereLight, DirectionalLight } from 'three';
+import { isNil, throttle } from 'lodash';
+import { Vector3, PerspectiveCamera, Scene, Group, AmbientLight, PointLight, HemisphereLight, DirectionalLight, Object3D } from 'three';
 import PropTypes from 'prop-types';
 import TWEEN from '@tweenjs/tween.js';
 
@@ -16,13 +16,16 @@ import Controls, { EVENTS } from './Controls';
 import log from '../../../lib/log';
 import Detector from '../../../three-extensions/Detector';
 import WebGLRendererWrapper from '../../../three-extensions/WebGLRendererWrapper';
-
+import { TRANSLATE_MODE } from '../../../constants';
 
 const ANIMATION_DURATION = 500;
 const DEFAULT_MODEL_POSITION = new Vector3(0, 0, 0);
 const EPS = 0.000001;
-
-
+const FPS = 60;
+const renderT = 1 / FPS;
+let parentDOM = null;
+let inputDOM = null;
+let inputDOM2 = null; // translate has two input for X and Y axis
 class Canvas extends PureComponent {
     node = React.createRef();
 
@@ -42,6 +45,7 @@ class Canvas extends PureComponent {
         scaleSize: PropTypes.number,
         target: PropTypes.object,
         displayedType: PropTypes.string,
+        transformMode: PropTypes.string,
 
         supportActions: PropTypes.object,
 
@@ -51,7 +55,6 @@ class Canvas extends PureComponent {
         updateScale: PropTypes.func,
         onModelAfterTransform: PropTypes.func,
         onModelBeforeTransform: PropTypes.func,
-        onModelTransform: PropTypes.func,
         onRotationPlacementSelect: PropTypes.func,
 
         // tmp
@@ -60,7 +63,9 @@ class Canvas extends PureComponent {
         showContextMenu: PropTypes.func,
 
         // inProgress
-        inProgress: PropTypes.bool
+        inProgress: PropTypes.bool,
+
+        primeTowerSelected: PropTypes.bool
     };
 
     static defaultProps = {
@@ -93,7 +98,6 @@ class Canvas extends PureComponent {
         this.onModelBeforeTransform = this.props.onModelBeforeTransform || noop;
         this.onModelAfterTransform = this.props.onModelAfterTransform || noop;
         this.onRotationPlacementSelect = this.props.onRotationPlacementSelect || noop;
-        this.onModelTransform = this.props.onModelTransform || noop;
 
         // threejs
         this.camera = null;
@@ -101,6 +105,13 @@ class Canvas extends PureComponent {
         this.scene = null;
         this.group = null;
         this.light = null;
+        this.controlFrontLeftTop = new Vector3();
+        this.cloneRotatePeripheral = new Object3D();
+        this.canvasWidthHalf = null;
+        this.canvasHeightHalf = null;
+        this.inputPositionTop = 0;
+        this.inputPositionLeft = 0;
+        this.inputLeftOffset = 0;
     }
 
     componentDidMount() {
@@ -114,11 +125,12 @@ class Canvas extends PureComponent {
 
         this.group.add(this.props.printableArea);
         this.props.printableArea.addEventListener('update', () => this.renderScene()); // TODO: another way to trigger re-render
+
+
         this.group.add(this.modelGroup.object);
         this.toolPathGroupObject && this.group.add(this.toolPathGroupObject);
         this.gcodeLineGroup && this.group.add(this.gcodeLineGroup);
         this.backgroundGroup && this.group.add(this.backgroundGroup);
-
 
         if (this.controls && this.props.inProgress) {
             this.controls.setInProgress(this.props.inProgress);
@@ -159,8 +171,24 @@ class Canvas extends PureComponent {
         if (nextProps.displayedType !== this.props.displayedType) {
             if (nextProps.displayedType === 'gcode') {
                 this.controls.removeTransformControls();
+                this.group.remove(this.modelGroup.object);
+                this.group.add(this.modelGroup.grayModeObject);
             } else {
-                this.controls.recoverTransformControls();
+                this.controls.recoverTransformControls(nextProps.primeTowerSelected, nextProps.transformMode);
+                this.group.remove(this.modelGroup.grayModeObject);
+                this.group.add(this.modelGroup.object);
+            }
+            this.renderScene();
+        }
+
+        if (nextProps.primeTowerSelected !== this.props.primeTowerSelected && nextProps.displayedType !== 'gcode') {
+            this.controls.removeTransformControls();
+            if (nextProps.primeTowerSelected) {
+                this.controls.recoverTransformControls(true, nextProps.transformMode);
+                this.controls.setPrimeTower(true);
+            } else {
+                this.controls.recoverTransformControls(false, nextProps.transformMode);
+                this.controls.setPrimeTower(false);
             }
             this.renderScene();
         }
@@ -218,11 +246,14 @@ class Canvas extends PureComponent {
         this.camera.position.copy(this.cameraInitialPosition);
         if (this.transformSourceType === '2D') {
             this.light = new DirectionalLight(0xffffff, 0.6);
+            this.light.position.copy(this.cameraInitialPosition);
         }
         if (this.transformSourceType === '3D') {
             this.light = new DirectionalLight(0x666666, 0.4);
+            const pLight = new PointLight(0xffffff, 0.60, 0, 0.60);
+            this.camera.add(pLight);
+            pLight.position.copy(new Vector3(-4000, 7000, 50000));
         }
-        this.light.position.copy(this.cameraInitialPosition);
 
         // We need to change the default up vector if we use camera to respect XY plane
         if (this.props.cameraUp) {
@@ -239,10 +270,14 @@ class Canvas extends PureComponent {
         this.group = new Group();
         this.group.position.copy(DEFAULT_MODEL_POSITION);
         this.scene.add(this.group);
+
         if (this.transformSourceType === '3D') {
-            const lightTop = new HemisphereLight(0xdddddd, 0x666666);
-            lightTop.position.copy(new Vector3(0, 0, 1000));
+            const lightTop = new HemisphereLight(0xA3A3A3, 0x545454, 0.5);
+            const lightInside = new AmbientLight(0x666666);
+            lightTop.position.copy(new Vector3(0, 0, -49000));
+            lightInside.position.copy(new Vector3(0, 0, 0));
             this.scene.add(lightTop);
+            this.scene.add(lightInside);
         }
         if (this.transformSourceType === '2D') {
             this.scene.add(new HemisphereLight(0x000000, 0xcecece));
@@ -278,13 +313,8 @@ class Canvas extends PureComponent {
         this.controls.on(EVENTS.BEFORE_TRANSFORM_OBJECT, () => {
             this.onModelBeforeTransform(this.controls.transformControl.mode);
         });
-        this.controls.on(EVENTS.TRANSFORM_OBJECT, () => {
-            if (this.props.canOperateModel) {
-                this.onModelTransform();
-            }
-        });
         this.controls.on(EVENTS.AFTER_TRANSFORM_OBJECT, () => {
-            this.onModelAfterTransform(this.controls.transformControl.mode);
+            this.onModelAfterTransform(this.controls.transformControl.mode, this.controls.transformControl.axis);
         });
         this.controls.on(EVENTS.SELECT_PLACEMENT_FACE, (userData) => {
             this.onRotationPlacementSelect(userData);
@@ -299,9 +329,12 @@ class Canvas extends PureComponent {
         }
     }
 
+    setHoverFace(face) {
+        this.controls && this.controls.transformControl.setHoverFace(face);
+    }
+
     animation = () => {
         this.frameId = window.requestAnimationFrame(this.animation);
-
         this.renderScene();
     };
 
@@ -433,6 +466,7 @@ class Canvas extends PureComponent {
         this.camera.position.y = position.y;
         this.camera.position.z = position.z;
         this.controls.setTarget(new Vector3(0, 0, this.props.cameraInitialPosition.z));
+        this.controls.panScale = 1;
         this.renderScene();
     }
 
@@ -442,6 +476,7 @@ class Canvas extends PureComponent {
         this.camera.position.z = this.props.cameraInitialPosition.z;
         this.controls.setTarget(new Vector3(0, 0, this.props.cameraInitialPosition.z));
         // this.camera.lookAt(new Vector3(0, 0, this.cameraInitialPosition.z));
+        this.controls.panScale = 1;
         this.renderScene();
     }
 
@@ -453,6 +488,7 @@ class Canvas extends PureComponent {
         this.camera.position.y = position.y;
         this.camera.position.z = position.z;
         this.controls.setTarget(new Vector3(0, 0, this.props.cameraInitialPosition.z));
+        this.controls.panScale = 1;
         this.renderScene();
     }
 
@@ -464,6 +500,7 @@ class Canvas extends PureComponent {
         this.camera.position.y = position.y;
         this.camera.position.z = position.z;
         this.controls.setTarget(new Vector3(0, 0, this.props.cameraInitialPosition.z));
+        this.controls.panScale = 1;
         this.renderScene();
     }
 
@@ -475,7 +512,59 @@ class Canvas extends PureComponent {
         this.camera.position.y = position.y;
         this.camera.position.z = position.z;
         this.controls.setTarget(new Vector3(0, 0, this.props.cameraInitialPosition.z));
+        this.controls.panScale = 1;
         this.renderScene();
+    }
+
+    fitViewIn(center, selectedGroupBsphereRadius) {
+        const r = selectedGroupBsphereRadius;
+        const newTarget = {
+            ...center
+        };
+        // from
+        const object = {
+            ox: this.camera.position.x,
+            oy: this.camera.position.y,
+            oz: this.camera.position.z
+        };
+
+        // Calculate to = { o2, c }
+        // P1 = this.camrea + newTarget - oldTarget
+        const p1 = {
+            x: this.camera.position.x + center.x - this.controls.target.x,
+            y: this.camera.position.y + center.y - this.controls.target.y,
+            z: this.camera.position.z + center.z - this.controls.target.z
+        };
+        const multiple = 1.8;
+        const p1c = Math.sqrt((p1.x - center.x) * (p1.x - center.x) + (p1.y - center.y) * (p1.y - center.y) + (p1.z - center.z) * (p1.z - center.z));
+        const o2 = {
+            x: multiple * (p1.x - center.x) * Math.sqrt(2) * r / p1c + center.x,
+            y: multiple * (p1.y - center.y) * Math.sqrt(2) * r / p1c + center.y,
+            z: multiple * (p1.z - center.z) * Math.sqrt(2) * r / p1c + center.z,
+        };
+
+        // to
+        const to = {
+            ox: o2.x,
+            oy: o2.y,
+            oz: o2.z
+        };
+        const tween = new TWEEN.Tween(object)
+            .to(to, ANIMATION_DURATION)
+            .onUpdate(() => {
+                this.camera.position.x = object.ox;
+                this.camera.position.y = object.oy;
+                this.camera.position.z = object.oz;
+            });
+        this.startTween(tween);
+
+        setTimeout(() => {
+            this.camera.position.x = o2.x;
+            this.camera.position.y = o2.y;
+            this.camera.position.z = o2.z;
+            this.controls.setTarget(new Vector3(newTarget.x, newTarget.y, newTarget.z));
+            this.renderScene();
+        }, ANIMATION_DURATION);
     }
 
     toBottom() {
@@ -498,6 +587,7 @@ class Canvas extends PureComponent {
                 this.camera.position.x = this.controls.target.x;
                 this.camera.position.y = this.controls.target.y - Math.sin(rotation) * dist;
                 this.camera.position.z = this.controls.target.z + Math.cos(rotation) * dist;
+                this.controls.panScale = 1;
             });
         this.startTween(tween);
     }
@@ -573,22 +663,67 @@ class Canvas extends PureComponent {
     }
 
     renderScene() {
-        if (!this.isCanvasInitialized()) return;
-
-        this.light.position.copy(this.camera.position);
-
-        this.renderer.render(this.scene, this.camera);
-
-        TWEEN.update();
+        throttle(() => {
+            if (!this.isCanvasInitialized()) return;
+            if (this.transformSourceType === '2D') {
+                this.light.position.copy(this.camera.position);
+            }
+            if (this.transformSourceType === '3D' && this.controls.transformControl.mode !== 'mirror' && this.modelGroup?.selectedModelArray
+            && this.modelGroup.selectedModelArray[0]?.type !== 'primeTower') {
+                switch (this.controls.transformControl.mode) {
+                    case 'translate':
+                        this.cloneControlPeripheral = this.controls.transformControl.translatePeripheral.clone();
+                        break;
+                    case 'rotate':
+                        this.cloneControlPeripheral = this.controls.transformControl.rotatePeripheral.clone();
+                        break;
+                    case 'scale':
+                        this.cloneControlPeripheral = this.controls.transformControl.scalePeripheral.clone();
+                        break;
+                    default:
+                        this.cloneControlPeripheral = this.controls.transformControl.translatePeripheral.clone();
+                        break;
+                }
+                this.cloneControlPeripheral.updateMatrixWorld();
+                this.controlFrontLeftTop.setFromMatrixPosition(this.cloneControlPeripheral.matrixWorld);
+                this.controlFrontLeftTop.project(this.camera);
+                inputDOM = document.getElementById('control-input');
+                inputDOM2 = document.getElementById('control-input-2');
+                parentDOM = document.getElementById('smcanvas');
+                this.inputLeftOffset = inputDOM2 ? 104 : 48; // one input width is 96, if has inputDOM2, inputDOM has marginRight 16px
+                this.canvasWidthHalf = parentDOM.clientWidth * 0.5;
+                this.canvasHeightHalf = parentDOM.clientHeight * 0.5;
+                if (Math.abs(parseFloat(this.inputPositionLeft) - (this.controlFrontLeftTop.x * this.canvasWidthHalf + this.canvasWidthHalf - this.inputLeftOffset)) > 10
+                || Math.abs(parseFloat(this.inputPositionTop) - (-(this.controlFrontLeftTop.y * this.canvasHeightHalf) + this.canvasHeightHalf - 220)) > 10
+                ) {
+                    this.inputPositionLeft = `${this.controlFrontLeftTop.x * this.canvasWidthHalf + this.canvasWidthHalf - this.inputLeftOffset}px`;
+                    this.inputPositionTop = `${-(this.controlFrontLeftTop.y * this.canvasHeightHalf) + this.canvasHeightHalf - 220}px`;
+                }
+                inputDOM && (inputDOM.style.top = this.inputPositionTop);
+                inputDOM && (inputDOM.style.left = this.inputPositionLeft);
+                if (this.controls.transformControl.mode === TRANSLATE_MODE && (this.controls.transformControl.axis === 'XY' || this.controls.transformControl.axis === null)) {
+                    inputDOM2 && (inputDOM2.style.top = this.inputPositionTop);
+                    inputDOM2 && (inputDOM2.style.left = `${parseFloat(this.inputPositionLeft) + 120}px`);
+                    inputDOM2 && this.controls.transformControl.dragging && (inputDOM2.style.display = 'block');
+                }
+                this.controls.transformControl.dragging && inputDOM && (inputDOM.style.display = 'block');
+            }
+            if (this.transformSourceType === '3D' && (!this.modelGroup.selectedModelArray?.length || !this.modelGroup.isSelectedModelAllVisible())) {
+                inputDOM && (inputDOM.style.display = 'none');
+                inputDOM2 && (inputDOM2.style.display = 'none');
+            }
+            this.renderer.render(this.scene, this.camera);
+            TWEEN.update();
+        }, renderT)();
     }
 
     render() {
         if (!Detector.isWebGLAvailable()) {
             return Detector.getWebGLErrorMessage();
         }
-
         return (
             <div
+                id="smcanvas"
                 ref={this.node}
                 style={{
                     backgroundColor: '#F5F5F7'

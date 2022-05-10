@@ -1,17 +1,25 @@
-import React from 'react';
+import React, { useState } from 'react';
 import PropTypes from 'prop-types';
 import i18n from '../../../lib/i18n';
 import Select from '../../components/Select';
 import { NumberInput as Input } from '../../components/Input';
 import Checkbox from '../../components/Checkbox';
+import ColorSelector from '../../components/ColorSelector';
+import { HEAD_CNC, PRINTING_MATERIAL_CONFIG_COLORS } from '../../../constants';
 
 import TipTrigger from '../../components/TipTrigger';
 import SvgIcon from '../../components/SvgIcon';
+import Popover from '../../components/Popover';
 
-function SettingItem({ definitionKey, settings, isDefaultDefinition = () => true, onChangeDefinition, defaultValue, styleSize = 'large' }) {
+function SettingItem({ definitionKey, settings, isDefaultDefinition = () => true, onChangeDefinition, defaultValue, styleSize = 'large', managerType, officalDefinition }) {
+    const [showColor, setShowColor] = useState(false);
+
     const setting = settings[definitionKey];
 
     const isProfile = !isDefaultDefinition();
+    if (!setting) {
+        return null;
+    }
     const { label, description, type, unit = '', enabled, options, min, max } = setting;
     const settingDefaultValue = setting.default_value;
     const isDefault = defaultValue && (defaultValue.value === settingDefaultValue);
@@ -22,6 +30,7 @@ function SettingItem({ definitionKey, settings, isDefaultDefinition = () => true
             // parse resolveOrValue('adhesion_type') == 'skirt'
                 const enabledKey = condition.match("resolveOrValue\\('(.[^)|']*)'") ? condition.match("resolveOrValue\\('(.[^)|']*)'")[1] : null;
                 const enabledEqualValue = condition.match("== ?'(.[^)|']*)'") ? condition.match("== ?'(.[^)|']*)'")[1] : null;
+                const enabledUnequalValue = condition.match("!= ?'(.[^)|']*)'") ? condition.match("!= ?'(.[^)|']*)'")[1] : null;
                 const enabledGreaterValue = condition.match('> ?([0-9]+)') ? condition.match('> ?([0-9]+)')[1] : null;
                 const enabledLessValue = condition.match('< ?([0-9]+)') ? condition.match('< ?([0-9]+)')[1] : null;
                 if (enabledKey) {
@@ -30,10 +39,16 @@ function SettingItem({ definitionKey, settings, isDefaultDefinition = () => true
                         if (enabledEqualValue && value !== enabledEqualValue) {
                             return null;
                         }
+                        if (enabledUnequalValue && value === enabledUnequalValue) {
+                            return null;
+                        }
                         if (enabledGreaterValue && value <= enabledGreaterValue) {
                             return null;
                         }
                         if (enabledLessValue && value >= enabledLessValue) {
+                            return null;
+                        }
+                        if (settings[enabledKey].type === 'bool' && !value) {
                             return null;
                         }
                     }
@@ -108,10 +123,25 @@ function SettingItem({ definitionKey, settings, isDefaultDefinition = () => true
             });
         });
     }
+    const colorSelectorContent = (
+        <div>
+            <ColorSelector
+                recentColorKey="profile-manager"
+                colors={PRINTING_MATERIAL_CONFIG_COLORS}
+                value={settingDefaultValue.toString()}
+                onClose={() => {
+                    setShowColor(false);
+                }}
+                onChangeComplete={(color) => {
+                    onChangeDefinition(definitionKey, color);
+                }}
+            />
+        </div>
+    );
     return (
         <TipTrigger title={i18n._(label)} content={i18n._(description)} key={definitionKey}>
             <div className="position-re sm-flex justify-space-between height-32 margin-vertical-8">
-                <span className="text-overflow-ellipsis width-auto main-text-normal max-width-160">
+                <span className="text-overflow-ellipsis width-auto main-text-normal" style={{ maxWidth: '171px' }}>
                     {i18n._(label)}
                 </span>
                 <div className="sm-flex-auto">
@@ -175,6 +205,7 @@ function SettingItem({ definitionKey, settings, isDefaultDefinition = () => true
                             onChange={(option) => {
                                 onChangeDefinition(definitionKey, option.value);
                             }}
+                            disabled={officalDefinition && managerType === HEAD_CNC && definitionKey === 'tool_type'}
                         />
                     )}
                     {type === undefined && (
@@ -191,6 +222,30 @@ function SettingItem({ definitionKey, settings, isDefaultDefinition = () => true
                     {type === undefined && (
                         <span className="sm-parameter-row__input-unit">{unit}</span>
                     )}
+                    {type === 'color' && (
+                        <Popover
+                            content={colorSelectorContent}
+                            visible={showColor}
+                            trigger="click"
+                            placement="bottomRight"
+                            className="cancel-content-padding"
+                            onVisibleChange={(visible) => {
+                                setShowColor(visible);
+                            }}
+                        >
+                            <span
+                                className="sm-flex-width align-r height-percent-100 width-96 display-inline border-radius-8 border-default-black-5"
+                                style={{
+                                    background: settingDefaultValue,
+                                    height: 32
+                                }}
+                                role="button"
+                                tabIndex="-1"
+                                onKeyPress={() => {}}
+                                onClick={() => setShowColor(!showColor)}
+                            />
+                        </Popover>
+                    )}
                 </div>
             </div>
         </TipTrigger>
@@ -202,8 +257,9 @@ SettingItem.propTypes = {
     isDefaultDefinition: PropTypes.func,
     onChangeDefinition: PropTypes.func.isRequired,
     defaultValue: PropTypes.object,
-    styleSize: PropTypes.string
+    styleSize: PropTypes.string,
+    managerType: PropTypes.string,
+    officalDefinition: PropTypes.bool,
 };
 
 export default React.memo(SettingItem);
-// export default (SettingItem);

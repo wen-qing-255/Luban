@@ -4,7 +4,6 @@ import mv from 'mv';
 import includes from 'lodash/includes';
 import request from 'superagent';
 import * as opentype from 'opentype.js';
-// eslint-disable-next-line import/no-unresolved
 import libFontManager from 'font-scanner';
 import logger from 'universal-logger';
 
@@ -79,6 +78,18 @@ class FontManager {
         const fonts = (await Promise.all(promises)).filter(font => !!font);
 
         this.fonts = fonts;
+        this.fonts.forEach((font) => {
+            if (this.systemFonts.findIndex(i => i.family === font?.names?.fontFamily?.en) < 0) {
+                const newFont = {
+                    family: font.names.fontFamily.en,
+                    fontSubfamily: font.names.fontSubfamily.en,
+                    style: font.names.fontSubfamily.en,
+                    fullName: font.names.fullName.en,
+                    displayName: font.names.displayName.en
+                };
+                this.systemFonts.push(newFont);
+            }
+        });
         return fonts;
     }
 

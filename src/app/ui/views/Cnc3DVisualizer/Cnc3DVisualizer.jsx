@@ -19,14 +19,15 @@ import {
     FRONT,
     LEFT,
     RIGHT,
-    TOP
+    TOP,
+    DEFAULT_LUBAN_HOST
 } from '../../../constants';
 
 import i18n from '../../../lib/i18n';
 import { actions as editorActions } from '../../../flux/editor';
 // import styles from './styles.styl';
 
-const texture = new TextureLoader().load('../resources/images/wood.png');
+const texture = new TextureLoader().load(`${DEFAULT_LUBAN_HOST}/resources/images/wood.png`);
 
 const getModelTransformation = (t, size, coordinateMode, coordinateSize) => {
     const posDiff = {
@@ -90,7 +91,7 @@ const getMeshSize = (mesh) => {
 
 
 const setMeshTransform = (mesh, sourceScale, transformation, isRotate, direction = FRONT, placement = BOTTOM) => {
-    mesh.applyMatrix4(new Matrix4().getInverse(mesh.matrix));
+    mesh.applyMatrix4(new Matrix4().copy(mesh.matrix).invert());
     mesh.applyMatrix4(isRotate ? placementMatrixes[placement] : directionMatrixes[direction]);
 
     mesh.applyMatrix4(new Matrix4().makeScale(transformation.scaleX * sourceScale, Math.abs(transformation.scaleY * sourceScale), transformation.scaleY * sourceScale));

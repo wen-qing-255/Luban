@@ -5,7 +5,8 @@ import { Button } from '../components/Buttons';
 import i18n from '../../lib/i18n';
 
 export default function renderModal(options) {
-    const { actions, onClose } = options;
+    const { actions, onClose, zIndex } = options;
+
     let { renderFooter, renderBody, size, title } = options;
     const { shouldRenderFooter = true } = options;
 
@@ -19,19 +20,20 @@ export default function renderModal(options) {
     if (!renderFooter) {
         renderFooter = () => (
             <React.Fragment>
-                {actions.map(({ name, isPrimary, isAutoWidth, onClick, disabled = false }) => (
-                    <Button
-                        disabled={disabled}
-                        key={name}
-                        priority="level-two"
-                        className="margin-left-8"
-                        width={isAutoWidth ? 'auto' : '96px'}
-                        type={isPrimary ? 'primary' : 'default'}
-                        onClick={onClick}
-                    >
-                        {name}
-                    </Button>
-                ))
+                {
+                    actions.map(({ name, isPrimary, isAutoWidth, onClick, disabled = false }) => (
+                        <Button
+                            disabled={disabled}
+                            key={name}
+                            priority="level-two"
+                            className="margin-left-8"
+                            width={isAutoWidth ? 'auto' : '96px'}
+                            type={isPrimary ? 'primary' : 'default'}
+                            onClick={onClick}
+                        >
+                            {name}
+                        </Button>
+                    ))
                 }
             </React.Fragment>
         );
@@ -41,7 +43,7 @@ export default function renderModal(options) {
     }
 
     return (
-        <Modal disableOverlay size={size} onClose={onClose}>
+        <Modal disableOverlay size={size} onClose={onClose} zIndex={zIndex}>
             <Modal.Header>
                 {/* <Modal.Title> */}
                 {title}

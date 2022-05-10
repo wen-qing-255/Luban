@@ -1,21 +1,15 @@
 import { isNil, lt } from 'lodash';
 
+const projectRegex = /\.snap(lzr|3dp|cnc)$/;
+const gcodeRegex = /\.(gcode|nc|cnc)$/;
 const checkIsSnapmakerProjectFile = (file) => {
-    const [, tail] = file.split('.');
-    if (!tail) {
-        return false;
-    }
-    return tail.substring(0, 4).toLowerCase() === 'snap';
+    return projectRegex.test(file);
 };
 
 const checkIsGCodeFile = (file) => {
-    let [, tail] = file.split('.');
-    if (!tail) {
-        return false;
-    }
-    tail = tail.toLowerCase();
-    return tail === 'gcode' || tail === 'nc' || tail === 'cnc';
+    return gcodeRegex.test(file);
 };
+
 const checkObjectIsEqual = (objOld, objNew) => {
     if (isNil(objOld) && !isNil(objNew)) {
         return false;
@@ -68,6 +62,20 @@ const checkObjectIsEqual = (objOld, objNew) => {
                         const newModel = objNew[key][index];
                         return Object.entries(oldModel).every(([modelKey, modelValue]) => {
                             if (modelKey === 'processImageName' || modelKey === 'uploadName') {
+                                return true;
+                            } else {
+                                return JSON.stringify(newModel[modelKey]) === JSON.stringify(modelValue);
+                            }
+                        });
+                    });
+                } else if (key === 'toolpaths') {
+                    if (value?.length !== objNew[key]?.length) {
+                        return false;
+                    }
+                    return value.every((oldModel, index) => {
+                        const newModel = objNew[key][index];
+                        return Object.entries(oldModel).every(([modelKey, modelValue]) => {
+                            if (modelKey === 'status' || modelKey === 'toolPathFiles') {
                                 return true;
                             } else {
                                 return JSON.stringify(newModel[modelKey]) === JSON.stringify(modelValue);

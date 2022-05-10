@@ -6,7 +6,7 @@ import pkg from '../../package.json';
 import logger from '../lib/logger';
 import { ConfigV1Regex, ConfigV1Suffix } from '../constants';
 
-const log = logger('definition');
+const log = logger('service:definition');
 
 const SETTING_FIELDS = [
     'label', 'description', 'type', 'options', 'unit', 'enabled', 'default_value', 'value', 'enabled',
@@ -15,20 +15,55 @@ const SETTING_FIELDS = [
     'sm_value'
 ];
 
+const DEFAULT_PRINTING_MATERIAL = [
+    'material.pla.def.json',
+    'material.pla.black.def.json',
+    'material.pla.blue.def.json',
+    'material.pla.grey.def.json',
+    'material.pla.red.def.json',
+    'material.pla.yellow.def.json',
+    'material.abs.def.json',
+    'material.abs.black.def.json',
+    'material.petg.def.json',
+    'material.petg.black.def.json',
+    'material.petg.red.def.json',
+    'material.petg.blue.def.json',
+    'material.pla.wood.def.json',
+    'material.pla.glow.def.json',
+    'material.tpu.black.def.json',
+    'material.tpu.yellow.def.json'
+];
+
 const DEFAULT_PREDEFINED = {
     'printing': [
         'quality.fast_print.def.json',
         'quality.normal_quality.def.json',
         'quality.high_quality.def.json',
         'material.pla.def.json',
+        'material.pla.black.def.json',
+        'material.pla.blue.def.json',
+        'material.pla.grey.def.json',
+        'material.pla.red.def.json',
+        'material.pla.yellow.def.json',
         'material.abs.def.json',
-        'material.petg.def.json'
+        'material.abs.black.def.json',
+        'material.petg.def.json',
+        'material.petg.black.def.json',
+        'material.petg.red.def.json',
+        'material.petg.blue.def.json',
+        'material.pla.wood.def.json',
+        'material.pla.glow.def.json',
+        'material.tpu.black.def.json',
+        'material.tpu.yellow.def.json'
     ],
     'cnc': [
         'tool.default_CVbit.def.json',
-        'tool.default_FEM.def.json',
+        'tool.default_FEM1.5.def.json',
+        'tool.default_FEM3.175.def.json',
         'tool.default_MBEM.def.json',
-        'tool.default_SGVbit.def.json'
+        'tool.default_SGVbit.def.json',
+        'tool.rAcrylic_FEM1.5.def.json',
+        'tool.rEpoxy_SGVbit.def.json'
     ],
     'laser': [
         'present.default_CUT.def.json',
@@ -70,6 +105,7 @@ const DEFAULT_PREDEFINED = {
         'crazy_horse_leather.line_filled_engraving.def.json',
         'crazy_horse_leather.vector_engraving.def.json',
         'mdf.cutting_2mm.def.json',
+        'mdf.cutting_3mm.def.json',
         'mdf.dot_filled_engraving.def.json',
         'mdf.line_filled_engraving.def.json',
         'mdf.vector_engraving.def.json',
@@ -88,8 +124,12 @@ export class DefinitionLoader {
     definitionId = '';
 
     name = '';
+    // default name key
+    // i18nName = undefined;
 
     category = '';
+    // default category key
+    // i18nCategory = undefined;
 
     inherits = '';
 
@@ -111,7 +151,7 @@ export class DefinitionLoader {
         // in case of JSON parse error, set default json inherits from snapmaker2.def.json
         let json = {
             'name': 'Snapmaker Default',
-            'version': 2,
+            'version': pkg.version,
             'inherits': 'snapmaker2'
         };
         try {
@@ -119,7 +159,7 @@ export class DefinitionLoader {
             json = JSON.parse(data);
             this.loadJSON(headType, definitionId, json);
         } catch (e) {
-            console.error(`JSON Syntax error of: ${definitionId}`);
+            log.error(`JSON Syntax error of: ${definitionId}`);
         }
     }
 
@@ -135,7 +175,7 @@ export class DefinitionLoader {
         // in case of JSON parse error, set default json inherits from snapmaker2.def.json
         let json = {
             'name': 'Snapmaker Default',
-            'version': 2,
+            'version': pkg.version,
             'inherits': 'snapmaker2'
         };
         try {
@@ -143,7 +183,7 @@ export class DefinitionLoader {
             json = JSON.parse(data);
             this.loadJSON(headType, definitionId, json);
         } catch (e) {
-            console.error(`JSON Syntax error of: ${definitionId}`);
+            log.error(`Default JSON Syntax error of: ${definitionId}`);
         }
     }
 
@@ -164,8 +204,14 @@ export class DefinitionLoader {
         if (json.name) {
             this.name = json.name;
         }
+        if (json.i18nName) {
+            this.i18nName = json.i18nName;
+        }
         if (json.category) {
             this.category = json.category;
+        }
+        if (json.i18nCategory) {
+            this.i18nCategory = json.i18nCategory;
         }
 
         // settings
@@ -216,6 +262,8 @@ export class DefinitionLoader {
             version: pkg.version,
             name: this.name,
             category: this.category,
+            i18nName: this.i18nName,
+            i18nCategory: this.i18nCategory,
             inherits: this.inherits,
             metadata: this.metadata,
             overrides
@@ -227,6 +275,8 @@ export class DefinitionLoader {
             definitionId: this.definitionId,
             name: this.name,
             category: this.category,
+            i18nName: this.i18nName,
+            i18nCategory: this.i18nCategory,
             inherits: this.inherits,
             settings: this.settings,
             metadata: this.metadata,
@@ -238,6 +288,7 @@ export class DefinitionLoader {
         this.definitionId = object.definitionId;
         this.name = object.name;
         this.category = object.category;
+        this.i18nCategory = object.i18nCategory;
         this.inherits = object.inherits;
         this.ownKeys = new Set(object.ownKeys);
         this.settings = object.settings;
@@ -250,6 +301,14 @@ export class DefinitionLoader {
 
     updateCategory(category) {
         this.category = category;
+    }
+
+    updateI18nName(i18nName) {
+        this.i18nName = i18nName;
+    }
+
+    updateI18nCategory(i18nCategory) {
+        this.i18nCategory = i18nCategory;
     }
 
     updateSettings(settings) {
@@ -289,17 +348,21 @@ export function loadDefinitionLoaderByFilename(headType, filename, configPath, i
 
 // TODO: merge 'loadMaterialDefinitions' and 'loadQualityDefinitions' function
 export function loadMaterialDefinitions(headType, configPath) {
-    const predefined = [];
+    const predefined = DEFAULT_PRINTING_MATERIAL;
 
-    const regex = /^material.([A-Za-z0-9_]+).def.json$/;
+    const regex = /^material\.([A-Za-z0-9_]+).([A-Za-z0-9_]+?)\.def\.json$/;
     const defaultDefinitionLoader = loadDefinitionLoaderByFilename(headType, 'material.pla.def.json', configPath);
-    predefined.push('material.pla.def.json');
-    predefined.push('material.abs.def.json');
-    predefined.push('material.petg.def.json');
+    // predefined.push('material.pla.def.json');
+    // predefined.push('material.abs.def.json');
+    // predefined.push('material.petg.def.json');
 
     const configDir = `${DataStorage.configDir}/${headType}`;
-    const defaultFilenames = fs.readdirSync(`${configDir}/${configPath}`);
-
+    let defaultFilenames = [];
+    try {
+        defaultFilenames = fs.readdirSync(`${configDir}/${configPath}`);
+    } catch (e) {
+        log.error(e);
+    }
     // Load pre-defined definitions first
     const definitions = [];
     for (const filename of predefined) {
@@ -337,7 +400,12 @@ export function loadQualityDefinitions(headType, configPath) {
     predefined.push('quality.high_quality.def.json');
 
     const configDir = `${DataStorage.configDir}/${headType}`;
-    const defaultFilenames = fs.readdirSync(`${configDir}/${configPath}`);
+    let defaultFilenames = [];
+    try {
+        defaultFilenames = fs.readdirSync(`${configDir}/${configPath}`);
+    } catch (e) {
+        log.error(e);
+    }
     // Load pre-defined definitions first
     const definitions = [];
     for (const filename of predefined) {
@@ -377,13 +445,19 @@ export function loadDefinitionsByPrefixName(headType, prefix, configPath) {
 }
 
 export function loadAllSeriesDefinitions(isDefault = false, headType, series = 'A150') {
+    // TODO: series name?
     const _headType = (headType === 'laser' && includes(series, '10w')) ? '10w-laser' : headType;
     const predefined = DEFAULT_PREDEFINED[_headType];
     const definitions = [];
 
     const configDir = isDefault ? `${DataStorage.defaultConfigDir}/${headType}`
         : `${DataStorage.configDir}/${headType}`;
-    const defaultFilenames = fs.readdirSync(`${configDir}/${series}`);
+    let defaultFilenames = [];
+    try {
+        defaultFilenames = fs.readdirSync(`${configDir}/${series}`);
+    } catch (e) {
+        log.error(e);
+    }
 
     if (isDefault) {
         for (const filename of predefined) {
@@ -396,17 +470,21 @@ export function loadAllSeriesDefinitions(isDefault = false, headType, series = '
         const defaultDefinitionLoader = loadDefinitionLoaderByFilename(headType, predefined[0], series);
         for (const filename of defaultFilenames) {
             if (ConfigV1Regex.test(filename)) {
-                const definitionLoader = loadDefinitionLoaderByFilename(headType, filename, series, isDefault);
-                if (defaultDefinitionLoader) {
-                    const ownKeys = Array.from(defaultDefinitionLoader.ownKeys).filter(e => !definitionLoader.ownKeys.has(e));
-                    if (ownKeys && ownKeys.length > 0) {
-                        for (const ownKey of ownKeys) {
-                            definitionLoader.ownKeys.add(ownKey);
+                try {
+                    const definitionLoader = loadDefinitionLoaderByFilename(headType, filename, series, isDefault);
+                    if (defaultDefinitionLoader) {
+                        const ownKeys = Array.from(defaultDefinitionLoader.ownKeys).filter(e => !definitionLoader.ownKeys.has(e));
+                        if (ownKeys && ownKeys.length > 0) {
+                            for (const ownKey of ownKeys) {
+                                definitionLoader.ownKeys.add(ownKey);
+                            }
+                            writeDefinition(headType, filename, series, definitionLoader);
                         }
-                        writeDefinition(headType, filename, series, definitionLoader);
                     }
+                    definitions.push(definitionLoader.toObject());
+                } catch (e) {
+                    log.error(e);
                 }
-                definitions.push(definitionLoader.toObject());
             }
         }
     }

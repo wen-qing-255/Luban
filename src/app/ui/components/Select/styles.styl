@@ -6,6 +6,12 @@
     .highest-large{
         width: 288px;
     }
+    .higher-larger {
+        width: 258px;
+        :global(.ant-select-selection-item) {
+            max-width: 224px;
+        }
+    }
     .super-large{
         width: 200px;
     }
@@ -27,6 +33,7 @@
             padding: 0 8px;
             border: 1px solid #B9BCBF;
             border-radius: 8px!important;
+            height: 31px;
             :global(span.ant-select-selection-search) {
                 left: 8px !important;
             }
@@ -74,6 +81,25 @@
   width auto !important;
   max-width: 200px;
   padding: 4px 0 !important;
+  :global(.ant-select-tree-switcher_open)::before, :global(.ant-select-tree-switcher_close)::before {
+    content: '';
+    position: absolute;
+    //right: -310px;
+    top: 0;
+    left: 0;
+    bottom: 0;
+  }
+  :global(.ant-select-tree-switcher_open), :global(.ant-select-tree-switcher_close) {
+      padding-right: 100%
+      z-index: 100
+      :global(.ant-select-tree-switcher-icon) {
+          margin-left: 8px;
+      }
+  }
+  :global(.ant-select-tree-node-content-wrapper-close), :global(.ant-select-tree-node-content-wrapper-open) {
+      margin-left: -100%
+      z-index: 10
+  }
   :global(.ant-select-tree-list-holder) {
     :global(.ant-select-tree-switcher-noop) {
       display: none;
@@ -82,8 +108,11 @@
       height 32px
       padding 0 !important
       width 100%
+      &:hover {
+          background: #eeeff0;
+      }
     }
-    :global(.ant-select-tree-node-selected) {
+    :global(.ant-select-tree-treenode-selected), :global(.ant-select-tree-node-selected) {
       background: #E7F3FF !important;
     }
     :global(.ant-select-tree-node-content-wrapper) {
@@ -91,7 +120,7 @@
       height 32px;
       line-height 32px;
       padding-left: 24px;
-      width 100%
+      width 85%
       :global(.ant-select-tree-title) {
         max-width 278px;
         display: inline-block;
@@ -101,8 +130,13 @@
         width 100%
       }
       &:hover {
-        background: #EEEFF0;
+        background: transparent;
       }
+    }
+
+    :global(.ant-select-tree-node-content-wrapper-normal) {
+        padding-left 8px;
+        padding-right: 12px;
     }
     :global(.ant-select-tree-treenode-disabled) {
       :global(.ant-select-tree-node-content-wrapper) {

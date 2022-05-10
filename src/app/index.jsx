@@ -4,28 +4,25 @@ import moment from 'moment';
 import React from 'react';
 import ReactDOM from 'react-dom';
 import { ConfigProvider } from 'antd';
-import { createStore, applyMiddleware } from 'redux';
 import { Provider } from 'react-redux';
-import thunk from 'redux-thunk';
 import i18next from 'i18next';
 import { initReactI18next } from 'react-i18next';
-import ReactGA from 'react-ga';
 import LanguageDetector from 'i18next-browser-languagedetector';
 import XHR from 'i18next-xhr-backend';
 import { TRACE, DEBUG, INFO, WARN, ERROR } from 'universal-logger';
-
 import settings from './config/settings';
 import { controller, screenController } from './lib/controller';
 import log from './lib/log';
 import { toQueryObject } from './lib/query';
 import user from './lib/user';
 import { machineStore } from './store/local-storage';
-import reducer from './flux';
+import reduxStore from './store';
 import App from './ui/App';
 import './styles/vendor.styl';
 import './styles/app.styl';
-import { appbarMenuMiddleware } from './lib/redux-middleware';
 import 'antd/dist/antd.css';
+import { initialize } from './lib/gaEvent';
+
 
 series([
     (next) => {
@@ -107,10 +104,8 @@ series([
 
     const container = document.createElement('div');
     document.body.appendChild(container);
-
-    ReactGA.initialize('UA-106828154-1');
-
-    const reduxStore = createStore(reducer, applyMiddleware(thunk, appbarMenuMiddleware));
+    const userId = machineStore.get('userId');
+    initialize(userId);
 
     ReactDOM.render(
         <ConfigProvider autoInsertSpaceInButton={false}>

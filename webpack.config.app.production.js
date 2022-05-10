@@ -1,7 +1,7 @@
 /* eslint no-var: 0 */
 /* eslint prefer-arrow-callback: 0 */
 const without = require('lodash/without');
-const crypto = require('crypto');
+// const crypto = require('crypto');
 const path = require('path');
 const findImports = require('find-imports');
 const webpack = require('webpack');
@@ -16,18 +16,17 @@ const stylusLoader = require('stylus-loader');
 
 const babelConfig = require('./babel.config');
 const languages = require('./webpack.config.app-i18n').languages;
-const pkg = require('./package.json');
+// const pkg = require('./package.json');
 
 // Use publicPath for production
-const publicPath = (function calculatePublicPath(payload) {
-    const algorithm = 'sha1';
-    const buf = String(payload);
-    const hash = crypto.createHash(algorithm).update(buf).digest('hex');
-    return `/${hash.substr(0, 8)}/`; // 8 digits
-}(pkg.version));
-
+// const publicPath = (function calculatePublicPath(payload) {
+//     const algorithm = 'sha1';
+//     const buf = String(payload);
+//     const hash = crypto.createHash(algorithm).update(buf).digest('hex');
+//     return `/${hash.substr(0, 8)}/`; // 8 digits
+// }(pkg.version));
+const publicPath = './';
 const timestamp = new Date().getTime();
-
 
 module.exports = {
     mode: 'production',
@@ -41,7 +40,7 @@ module.exports = {
             path.resolve(__dirname, 'src/app'),
             'node_modules'
         ],
-        extensions: ['.js', '.json', '.jsx', '.styl']
+        extensions: ['.js', '.json', '.jsx', '.styl', '.ts']
     },
     entry: {
         polyfill: path.resolve(__dirname, 'src/app/polyfill/index.js'),
@@ -92,15 +91,26 @@ module.exports = {
             preserve: false
         }),*/
         new HtmlWebpackPlugin({
-            filename: 'index.hbs',
-            template: path.resolve(__dirname, 'src/app/resources/assets/index.hbs'),
+            filename: 'index.html',
+            template: path.resolve(__dirname, 'src/app/resources/assets/index.html'),
             chunksSortMode: 'dependency' // Sort chunks by dependency
         })
     ],
     module: {
         rules: [
             {
-                test: /\.jsx?$/,
+                test: /\.worker\.(j|t)s$/,
+                loader: 'worker-loader',
+                options: {
+                    filename: '[name].js',
+                },
+            },
+            {
+                test: /\.ts$/,
+                loader: 'ts-loader'
+            },
+            {
+                test: /\.jsx?$|\.ts$/,
                 loader: 'eslint-loader',
                 enforce: 'pre',
                 exclude: /node_modules/
@@ -164,10 +174,6 @@ module.exports = {
             {
                 test: /\.(ttf|eot)(\?v=[0-9]\.[0-9]\.[0-9])?$/,
                 loader: 'file-loader'
-            },
-            {
-                test: /\.worker\.js$/,
-                use: { loader: 'worker-loader' }
             }
         ]
     },

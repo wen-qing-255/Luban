@@ -26,6 +26,7 @@ function Connection({ widgetId, widgetActions }) {
     const { connectionType, isConnected, series, isHomed } = useSelector(state => state.machine);
     const [alertMessage, setAlertMessage] = useState('');
     const [showHomeReminder, setShowHomeReminder] = useState(false);
+    const [homing, setHoming] = useState(false);
     const dispatch = useDispatch();
 
     const actions = {
@@ -46,7 +47,8 @@ function Connection({ widgetId, widgetActions }) {
         },
         clickHomeModalOk: () => {
             dispatch(machineActions.executeGcodeAutoHome());
-            setShowHomeReminder(false);
+            // setShowHomeReminder(false);
+            setHoming(true);
         }
     };
 
@@ -55,16 +57,17 @@ function Connection({ widgetId, widgetActions }) {
     }, []);
 
     useEffect(() => {
-        if (!isHomed) {
+        if (!isHomed && isConnected) {
             if (dataSource === PROTOCOL_TEXT) {
                 actions.openHomeModal();
             }
         } else {
+            setHoming(false);
             if (dataSource === PROTOCOL_TEXT) {
                 actions.closeHomeModal();
             }
         }
-    }, [isHomed]);
+    }, [isHomed, isConnected]);
 
     const isOriginal = series === MACHINE_SERIES.ORIGINAL.value;
     return (
@@ -105,7 +108,7 @@ function Connection({ widgetId, widgetActions }) {
                 <WifiConnection />
             )}
             {isConnected && showHomeReminder && !isOriginal && isHomed !== null && !isHomed && (
-                <Modal disableOverlay size="sm" onClose={() => setShowHomeReminder(false)}>
+                <Modal disableOverlay size="sm" closable={false}>
                     <Modal.Header>
                         {i18n._('key-Workspace/Connection-Go Home')}
                     </Modal.Header>
@@ -116,12 +119,15 @@ function Connection({ widgetId, widgetActions }) {
                     </Modal.Body>
                     <Modal.Footer>
                         <Button
+                            loading={homing}
                             priority="level-two"
                             className="align-r"
                             width="96px"
                             onClick={actions.clickHomeModalOk}
                         >
-                            {i18n._('key-Workspace/Connection-OK')}
+                            {!homing && (
+                                <span>{i18n._('key-Workspace/Connection-OK')}</span>
+                            )}
                         </Button>
                     </Modal.Footer>
                 </Modal>

@@ -12,14 +12,29 @@ import { actions as printingActions } from '../../../flux/printing';
 import { actions as projectActions } from '../../../flux/project';
 import { actions as machineActions } from '../../../flux/machine';
 
-import { HEAD_PRINTING, PRINTING_MANAGER_TYPE_QUALITY, PRINTING_QUALITY_CONFIG_INDEX,
-    PRINTING_QUALITY_CUSTOMIZE_FIELDS, PRINTING_QUALITY_CONFIG_GROUP } from '../../../constants';
+import {
+    HEAD_PRINTING,
+    PRINTING_MANAGER_TYPE_QUALITY,
+    PRINTING_QUALITY_CONFIG_INDEX,
+    PRINTING_QUALITY_CUSTOMIZE_FIELDS,
+    PRINTING_QUALITY_CONFIG_GROUP_DUAL,
+    PRINTING_QUALITY_CONFIG_GROUP_SINGLE,
+    SINGLE_EXTRUDER_TOOLHEAD_FOR_SM2
+} from '../../../constants';
 import SettingItem from '../../views/ProfileManager/SettingItem';
 import ConfigValueBox from '../../views/ProfileManager/ConfigValueBox';
 import styles from './styles.styl';
+import { getSelectOptions } from '../../utils/profileManager';
 
 const newKeys = cloneDeep(PRINTING_QUALITY_CONFIG_INDEX);
-const ALL_DEFAULT_DEFINITION_ID_ARRAY = ['material.pla', 'material.abs', 'material.petg', 'quality.fast_print', 'quality.normal_quality', 'quality.high_quality'];
+const ALL_DEFAULT_DEFINITION_ID_ARRAY = [
+    'material.pla', 'material.abs', 'material.petg',
+    'material.pla.black', 'material.abs.black', 'material.petg.black',
+    'material.pla.blue', 'material.pla.grey', 'material.pla.red', 'material.pla.yellow',
+    'material.petg.blue', 'material.petg.red', 'material.pla.glow', 'material.pla.wood',
+    'material.tpu.black', 'material.tpu.yellow',
+    'quality.fast_print', 'quality.normal_quality', 'quality.high_quality'
+];
 function isOfficialDefinition(key) {
     return includes(cloneDeep(PRINTING_QUALITY_CUSTOMIZE_FIELDS), key);
 }
@@ -33,6 +48,8 @@ function Configurations({ widgetActions }) {
     const qualityDefinitions = useSelector(state => state?.printing?.qualityDefinitions);
     const defaultQualityId = useSelector(state => state?.printing?.defaultQualityId, shallowEqual);
     let printingCustomConfigs = useSelector(state => state?.machine?.printingCustomConfigs);
+    const toolHead = useSelector(state => state?.machine?.toolHead);
+    const printingQualityConfigGroup = (toolHead.printingToolhead === SINGLE_EXTRUDER_TOOLHEAD_FOR_SM2 ? PRINTING_QUALITY_CONFIG_GROUP_SINGLE : PRINTING_QUALITY_CONFIG_GROUP_DUAL);
     const dispatch = useDispatch();
 
     const actions = {
@@ -144,14 +161,15 @@ function Configurations({ widgetActions }) {
     const isProfile = defaultQualityId
         && includes(ALL_DEFAULT_DEFINITION_ID_ARRAY, defaultQualityId);
 
-    const customDefinitionOptions = qualityDefinitions.map(d => ({
-        label: d.name,
-        value: d.definitionId
-    }));
+
     if (!selectedDefinition) {
         return null;
     }
-
+    const toolDefinitionOptions = getSelectOptions(qualityDefinitions);
+    const valueObj = {
+        firstKey: 'definitionId',
+        firstValue: selectedDefinition?.definitionId
+    };
     return (
         <div>
             <div className={classNames(
@@ -162,9 +180,10 @@ function Configurations({ widgetActions }) {
             >
                 <Select
                     clearable={false}
-                    searchable
+                    isGroup
                     size="292px"
-                    options={customDefinitionOptions}
+                    valueObj={valueObj}
+                    options={toolDefinitionOptions}
                     value={selectedDefinition.definitionId}
                     onChange={(option) => {
                         actions.onSelectCustomDefinitionById(option.value);
@@ -229,7 +248,7 @@ function Configurations({ widgetActions }) {
                                 calculateTextIndex={calculateTextIndex}
                                 customConfigs={printingCustomConfigs}
                                 definitionForManager={selectedDefinition}
-                                optionConfigGroup={PRINTING_QUALITY_CONFIG_GROUP}
+                                optionConfigGroup={printingQualityConfigGroup}
                                 isOfficialDefinition={isOfficialDefinition}
                                 type="checkbox"
                                 onChangeDefinition={onChangeCustomConfig}

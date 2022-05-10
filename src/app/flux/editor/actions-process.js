@@ -1,21 +1,24 @@
-import uuid from 'uuid';
+import { v4 as uuid } from 'uuid';
 import _ from 'lodash';
 import { baseActions } from './actions-base';
 import { controller } from '../../lib/controller';
 import { STEP_STAGE, PROCESS_STAGE } from '../../lib/manager/ProgressManager';
-import { DISPLAYED_TYPE_MODEL, DISPLAYED_TYPE_TOOLPATH, HEAD_LASER, SELECTEVENT } from '../../constants';
+import { DISPLAYED_TYPE_MODEL, DISPLAYED_TYPE_TOOLPATH, HEAD_CNC, HEAD_LASER, SELECTEVENT } from '../../constants';
 import { getToolPathType } from '../../toolpaths/utils';
 
 import { toast } from '../../ui/components/Toast';
 import { ToastWapper } from '../../ui/components/Toast/toastContainer';
-
 import i18n from '../../lib/i18n';
+/* eslint-disable-next-line import/no-cycle */
 import { actions as operationHistoryActions } from '../operation-history';
+/* eslint-disable-next-line import/no-cycle */
+import { actions as projectActions } from '../project';
 import DeleteToolPathOperation from '../operation-history/DeleteToolPathOperation';
 import Operations from '../operation-history/Operations';
 import { timestamp } from '../../../shared/lib/random-utils';
 import definitionManager from '../manager/DefinitionManager';
 import api from '../../api';
+import { logSvgSlice } from '../../lib/gaEvent';
 
 let toastId;
 export const processActions = {
@@ -29,8 +32,15 @@ export const processActions = {
         }));
 
         // start generate toolpath
+        const toolPathPromiseArray = [];
         toolPathGroup.toolPaths.forEach((toolPath) => {
-            dispatch(processActions.commitGenerateToolPath(headType, toolPath.id));
+            const { materials } = getState()[headType];
+            toolPathPromiseArray.push(toolPathGroup.commitToolPathPromise(toolPath?.id, { materials }));
+        });
+
+        Promise.all(toolPathPromiseArray).then((taskArray) => {
+            taskArray = taskArray.filter(d => !!d);
+            controller.commitToolPathTaskArray(taskArray);
         });
     },
 
@@ -50,7 +60,10 @@ export const processActions = {
             }
         });
         if (visibleToolPathsLength > 0) {
-            progressStatesManager.startProgress(PROCESS_STAGE.CNC_LASER_GENERATE_TOOLPATH_AND_PREVIEW, [visibleToolPathsLength, visibleToolPathsLength, visibleToolPathsLength]);
+            progressStatesManager.startProgress(
+                PROCESS_STAGE.CNC_LASER_GENERATE_TOOLPATH_AND_PREVIEW,
+                [visibleToolPathsLength, visibleToolPathsLength, 1] // generate gcode consider as one task
+            );
         }
         toolPathGroup.toolPaths.forEach((toolPath) => {
             toolPath.setWarningStatus();
@@ -59,6 +72,7 @@ export const processActions = {
             toolPath.object = toolPath.object.clone();
             toolPathGroup.toolPathObjects.add(toolPath.object);
         });
+        logSvgSlice(headType, visibleToolPathsLength);
         // toolPathGroup.selectToolPathById();
         dispatch(baseActions.updateState(headType, {
             needToPreview: false
@@ -204,14 +218,6 @@ export const processActions = {
         toolPathGroup.selectOneToolPathId(toolPathId);
     },
 
-    updatingToolPath: (headType, toolPathId) => (dispatch, getState) => {
-        const { toolPathGroup } = getState()[headType];
-        const toolPath = toolPathGroup.getToolPath(toolPathId);
-        dispatch(baseActions.updateState(headType, {
-            updatingToolPath: toolPath
-        }));
-    },
-
     saveToolPath: (headType, toolPath) => (dispatch, getState) => {
         const { toolPathGroup, materials, autoPreviewEnabled, displayedType } = getState()[headType];
         if (toolPathGroup.getToolPath(toolPath.id)) {
@@ -227,10 +233,10 @@ export const processActions = {
                 simulationNeedToPreview: true,
                 displayedType: DISPLAYED_TYPE_MODEL,
                 needToPreview: true,
-                updatingToolPath: null,
                 isChangedAfterGcodeGenerating: true
             }));
         }
+        dispatch(projectActions.autoSaveEnvironment(headType));
     },
 
     updateToolPath: (headType, toolPathId, newState) => (dispatch, getState) => {
@@ -249,6 +255,7 @@ export const processActions = {
         dispatch(baseActions.updateState(headType, {
             isChangedAfterGcodeGenerating: true
         }));
+        dispatch(projectActions.autoSaveEnvironment(headType));
     },
 
     toolPathToDown: (headType, toolPathId) => (dispatch, getState) => {
@@ -257,6 +264,7 @@ export const processActions = {
         dispatch(baseActions.updateState(headType, {
             isChangedAfterGcodeGenerating: true
         }));
+        dispatch(projectActions.autoSaveEnvironment(headType));
     },
 
     toolPathToTop: (headType, toolPathId) => (dispatch, getState) => {
@@ -276,12 +284,13 @@ export const processActions = {
     },
 
     deleteToolPath: (headType, selectedToolPathIDArray) => (dispatch, getState) => {
-        const { toolPathGroup, displayedType } = getState()[headType];
+        const { toolPathGroup, displayedType, modelGroup } = getState()[headType];
 
         const operations = new Operations();
         selectedToolPathIDArray.forEach((id) => {
             const operation = new DeleteToolPathOperation({
                 target: toolPathGroup._getToolPath(id),
+                models: modelGroup?.models,
                 toolPathGroup
             });
             operations.push(operation);
@@ -328,7 +337,9 @@ export const processActions = {
      * @returns {Function}
      */
     commitGenerateGcode: (headType) => (dispatch, getState) => {
-        const { toolPathGroup, progressStatesManager } = getState()[headType];
+        const { toolPathGroup, progressStatesManager, coordinateMode } = getState()[headType];
+        const { size, toolHead, series } = getState().machine;
+        const currentToolHead = (headType === HEAD_CNC ? toolHead.cncToolhead : toolHead.laserToolhead);
         const toolPaths = toolPathGroup.getCommitGenerateGcodeInfos();
 
         if (!toolPaths || toolPaths.length === 0) {
@@ -338,18 +349,22 @@ export const processActions = {
         toolPaths[0].thumbnail = toolPathGroup.thumbnail;
 
         dispatch(baseActions.updateState(
-            headType, {
-                isGcodeGenerating: true
-            }
+            headType, { isGcodeGenerating: true }
         ));
         dispatch(baseActions.updateState(headType, {
             stage: STEP_STAGE.CNC_LASER_GENERATING_GCODE,
             progress: progressStatesManager.updateProgress(STEP_STAGE.CNC_LASER_GENERATING_GCODE, 0.1)
         }));
         controller.commitGcodeTask({
-            taskId: uuid.v4(),
+            taskId: uuid(),
             headType: headType,
-            data: toolPaths
+            data: {
+                toolPaths,
+                size,
+                toolHead: currentToolHead,
+                origin: coordinateMode.value,
+                series
+            }
         });
     },
 
@@ -357,15 +372,17 @@ export const processActions = {
         const { modelGroup, toolPathGroup, progressStatesManager } = getState()[headType];
         const { toolPaths } = toolPathGroup;
         const suffix = headType === 'laser' ? '.nc' : '.cnc';
-        let toolPathsModelId = [];
         const models = _.filter(modelGroup.getModels(), { 'visible': true });
-        toolPaths.forEach((item) => {
+        const toolPathsModelIds = toolPaths.reduce((prev, item) => {
             if (item.visible) {
-                toolPathsModelId = toolPathsModelId.concat(item.modelIDs);
+                item.visibleModelIDs.map(modelID => {
+                    return prev.add(modelID);
+                });
             }
-        });
+            return prev;
+        }, new Set());
         const currentModelName = _.find(models, (item) => {
-            return _.includes(toolPathsModelId, item.modelID);
+            return toolPathsModelIds.has(item.modelID);
         })?.modelName.substr(0, 128);
         const renderGcodeFileName = `${_.replace(currentModelName, /(\.svg|\.dxf|\.png|\.jpg|\.jpeg|\.bmp)$/, '')}_${new Date().getTime()}${suffix}`;
         if (taskResult.taskStatus === 'failed') {
@@ -424,7 +441,7 @@ export const processActions = {
         }
 
         controller.commitViewPathTask({
-            taskId: uuid.v4(),
+            taskId: uuid(),
             headType: headType,
             data: viewPathInfos
         });
@@ -530,31 +547,35 @@ export const processActions = {
         return createdDefinition;
     },
     onUploadToolDefinition: (headType, file) => async (dispatch, getState) => {
-        const { toolDefinitions } = getState()[headType];
-        const formData = new FormData();
-        formData.append('file', file);
-        // set a new name that cannot be repeated
-        formData.append('uploadName', `${file.name.substr(0, file.name.length - 9)}${timestamp()}.def.json`);
-        api.uploadFile(formData)
-            .then(async (res) => {
-                const response = res.body;
-                const definitionId = `New.${timestamp()}`;
-                const definition = await definitionManager.uploadDefinition(definitionId, response.uploadName);
-                let name = definition.name;
-                while (toolDefinitions.find(e => e.name === name)) {
-                    name = `#${name}`;
-                }
-                definition.name = name;
-                await definitionManager.updateDefinition({
-                    definitionId: definition.definitionId,
-                    name
+        return new Promise((resolve) => {
+            const { toolDefinitions } = getState()[headType];
+            const formData = new FormData();
+            formData.append('file', file);
+            // set a new name that cannot be repeated
+            formData.append('uploadName', `${file.name.substr(0, file.name.length - 9)}${timestamp()}.def.json`);
+            api.uploadFile(formData)
+                .then(async (res) => {
+                    const response = res.body;
+                    const definitionId = `New.${timestamp()}`;
+                    const definition = await definitionManager.uploadDefinition(definitionId, response.uploadName);
+
+                    let name = definition.name;
+                    while (toolDefinitions.find(e => e.name === name)) {
+                        name = `#${name}`;
+                    }
+                    definition.name = name;
+                    await definitionManager.updateDefinition({
+                        definitionId: definition.definitionId,
+                        name
+                    });
+                    dispatch(baseActions.updateState(headType, {
+                        toolDefinitions: [...toolDefinitions, definition]
+                    }));
+                    resolve(definition);
+                })
+                .catch(() => {
+                    // Ignore error
                 });
-                dispatch(baseActions.updateState(headType, {
-                    toolDefinitions: [...toolDefinitions, definition]
-                }));
-            })
-            .catch(() => {
-                // Ignore error
-            });
+        });
     }
 };

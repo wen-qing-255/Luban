@@ -8,6 +8,8 @@ import { actions as printingActions } from '../../../../flux/printing';
 import { actions as menuActions } from '../../../../flux/appbar-menu';
 import i18n from '../../../../lib/i18n';
 import styles from './styles.styl';
+import { HEAD_PRINTING } from '../../../../constants';
+import { logTransformOperation } from '../../../../lib/gaEvent';
 
 function normalizeNum(num) {
     if (typeof num === 'number') {
@@ -89,7 +91,7 @@ const Table = React.memo(({ tableColumns, onRowSelect, selectedRow, data, setDat
         if (refThead.current.children[0] && refTbody.current.children[0]) {
             const headCeilWidthArr = Array.prototype.slice.call(refThead.current.children[0].children).map(el => Math.ceil(el.getBoundingClientRect().width));
             const bodyCeilWidthArr = Array.prototype.slice.call(refTbody.current.children[0].children).map(el => Math.ceil(el.getBoundingClientRect().width));
-            const scrollbarVisible = (refScroll.current.getBoundingClientRect().width > refScroll.current.clientWidth);
+            const scrollbarVisible = (Math.floor(refScroll.current.getBoundingClientRect().width) > refScroll.current.clientWidth);
             const newWidthArr = [];
 
             setShowScrollWidth(scrollbarVisible);
@@ -134,7 +136,7 @@ const Table = React.memo(({ tableColumns, onRowSelect, selectedRow, data, setDat
                 </thead>
             </table>
             <div className={classNames(styles.scroll)} ref={refScroll}>
-                { data.length === 0 ? <div className="text-center padding-vertical-56">{i18n._('key-Printing/RotationAnalyze-Loading')}</div> : null }
+                {data.length === 0 ? <div className="text-center padding-vertical-56">{i18n._('key-Printing/RotationAnalyze-Loading')}</div> : null}
                 <table>
                     <tbody ref={refTbody}>
                         {
@@ -176,10 +178,8 @@ function RotationAnalysisOverlay({ onClose }) {
 
     const actions = {
         finish: () => {
-            dispatch(printingActions.clearRotationAnalysisTableData());
-            // record the last rotation to undo & redo
-            dispatch(printingActions.recordModelAfterTransform('rotate', modelGroup));
-            dispatch(printingActions.setTransformMode('rotate'));
+            dispatch(printingActions.finishAnalyzeRotation());
+            logTransformOperation(HEAD_PRINTING, 'roate', 'analyze_out');
             onClose();
         },
         onRowSelect: (row, scrollIntoView = false) => {
@@ -214,8 +214,7 @@ function RotationAnalysisOverlay({ onClose }) {
         columns = initColumns();
         // Mousetrap doesn't support unbind specific shortcut callback, use native instead
         window.addEventListener('keydown', actions.exitModal, true);
-        // record current rotation for undo & redo
-        dispatch(printingActions.recordModelBeforeTransform(modelGroup));
+        dispatch(printingActions.startAnalyzeRotation());
         initialTransformation = { ...modelGroup.selectedModelArray[0].transformation };
         dispatch(printingActions.analyzeSelectedModelRotation());
         dispatch(printingActions.setShortcutStatus(false));

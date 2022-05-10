@@ -24,14 +24,14 @@ import {
     WORKFLOW_STATUS_UNKNOWN,
     IMAGE_WIFI_ERROR,
     IMAGE_WIFI_WARNING,
+    CONNECTION_TYPE_WIFI,
     HEAD_CNC,
     HEAD_PRINTING,
     HEAD_LASER
 } from '../../../constants';
-import { ensureRange } from '../../../lib/numeric-utils';
 import TargetPoint from '../../../three-extensions/TargetPoint';
 import { actions as machineActions } from '../../../flux/machine';
-import { actions, WORKSPACE_STAGE } from '../../../flux/workspace';
+import { actions as workspaceActions, WORKSPACE_STAGE } from '../../../flux/workspace';
 import PrintablePlate from './PrintablePlate';
 
 import { loadTexture } from './helpers';
@@ -52,21 +52,17 @@ import ProgressBar from '../../components/ProgressBar';
 class Visualizer extends PureComponent {
     static propTypes = {
         // redux
-        size: PropTypes.object.isRequired,
         isEnclosureDoorOpen: PropTypes.bool,
         doorSwitchCount: PropTypes.number,
         isEmergencyStopped: PropTypes.bool,
-        materialThickness: PropTypes.number,
 
         laser10WErrorState: PropTypes.number,
 
         uploadState: PropTypes.string.isRequired,
-        headType: PropTypes.string,
-        gcodeFile: PropTypes.object,
         boundingBox: PropTypes.object,
-        // isConnected: PropTypes.bool.isRequired,
+        server: PropTypes.object.isRequired,
         connectionType: PropTypes.string.isRequired,
-        workflowStatus: PropTypes.string.isRequired,
+        workflowStatus: PropTypes.string,
         renderState: PropTypes.string.isRequired,
         renderingTimestamp: PropTypes.number.isRequired,
         stage: PropTypes.number.isRequired,
@@ -75,20 +71,31 @@ class Visualizer extends PureComponent {
         clearGcode: PropTypes.func.isRequired,
         setGcodePrintingIndex: PropTypes.func.isRequired,
 
-        startServerGcode: PropTypes.func.isRequired,
-        pauseServerGcode: PropTypes.func.isRequired,
-        resumeServerGcode: PropTypes.func.isRequired,
-        stopServerGcode: PropTypes.func.isRequired,
         executeGcode: PropTypes.func.isRequired,
+        updatePause3dpStatus: PropTypes.func.isRequired,
+        pause3dpStatus: PropTypes.object,
+
+        isRotate: PropTypes.bool,
+        toolHead: PropTypes.string,
+        gcodeFile: PropTypes.object,
+        series: PropTypes.string,
+        headType: PropTypes.string,
+        size: PropTypes.object.isRequired,
+
+        isLaserPrintAutoMode: PropTypes.bool.isRequired,
+        materialThickness: PropTypes.number.isRequired,
+        laserFocalLength: PropTypes.number,
+        background: PropTypes.object.isRequired,
+        workPosition: PropTypes.object.isRequired,
+        originOffset: PropTypes.object.isRequired,
 
         gcodePrintingInfo: PropTypes.shape({
             sent: PropTypes.number
         }),
-        workPosition: PropTypes.object,
 
         modelGroup: PropTypes.object,
         onRef: PropTypes.func,
-        preview: PropTypes.bool
+        preview: PropTypes.bool,
     };
 
     previewPrintableArea = null;
@@ -110,11 +117,6 @@ class Visualizer extends PureComponent {
     pauseStatus = {
         headStatus: false,
         headPower: 0
-    };
-
-    pause3dpStatus = {
-        pausing: false,
-        pos: null
     };
 
     state = {
@@ -151,12 +153,12 @@ class Visualizer extends PureComponent {
     };
 
     controllerEvents = {
-        'serialport:open': () => {
+        'connection:open': () => {
             this.stopToolheadRotationAnimation();
             this.updateWorkPositionToZero();
             this.props.setGcodePrintingIndex(0);
         },
-        'serialport:close': (options) => {
+        'connection:close': (options) => {
             const { dataSource } = options;
             if (dataSource !== PROTOCOL_TEXT) {
                 return;
@@ -264,63 +266,50 @@ class Visualizer extends PureComponent {
             return (this.props.headType === HEAD_LASER);
         },
         handleRun: () => {
-            const { connectionType } = this.props;
-            if (connectionType === CONNECTION_TYPE_SERIAL) {
-                const { workflowState } = this.state;
-                if (this.actions.isLaser()) {
-                    this.props.executeGcode('G0 X0 Y0 F1000');
-                    this.props.executeGcode(`G0 Z${this.props.materialThickness ?? 0} F1000`);
-                }
-
-                if (workflowState === WORKFLOW_STATE_IDLE) {
-                    controller.command('gcode:start');
-                }
-                if (workflowState === WORKFLOW_STATE_PAUSED) {
-                    if (this.actions.is3DP()) {
-                        this.pause3dpStatus.pausing = false;
-                        const pos = this.pause3dpStatus.pos;
-                        const cmd = `G1 X${pos.x} Y${pos.y} Z${pos.z} F1000\n`;
-                        controller.command('gcode', cmd);
-                        controller.command('gcode:resume');
-                    } else if (this.actions.isLaser()) {
-                        if (this.pauseStatus.headStatus) {
-                            // resume laser power
-                            const powerPercent = ensureRange(this.pauseStatus.headPower, 0, 100);
-                            const powerStrength = Math.floor(powerPercent * 255 / 100);
-                            if (powerPercent !== 0) {
-                                controller.command('gcode', `M3 P${powerPercent} S${powerStrength}`);
-                            } else {
-                                controller.command('gcode', 'M3');
-                            }
-                        }
-
-                        controller.command('gcode:resume');
-                    } else {
-                        if (this.pauseStatus.headStatus) {
-                            // resume spindle
-                            controller.command('gcode', 'M3');
-
-                            // for CNC machine, resume need to wait >500ms to let the tool head started
-                            setTimeout(() => {
-                                controller.command('gcode:resume');
-                            }, 1000);
-                        } else {
-                            controller.command('gcode:resume');
-                        }
-                    }
-                }
-            } else {
-                const { workflowStatus } = this.props;
-                if (workflowStatus === WORKFLOW_STATUS_IDLE) {
-                    this.props.startServerGcode((err) => {
-                        if (err) {
-                            if (err.status === 202) {
+            const { server,
+                workflowStatus, connectionType,
+                headType, isLaserPrintAutoMode,
+                materialThickness,
+                isRotate,
+                toolHead,
+                gcodeFile,
+                series,
+                laserFocalLength,
+                background,
+                size,
+                workPosition,
+                originOffset } = this.props;
+            const { workflowState } = this.state;
+            if ((connectionType === CONNECTION_TYPE_WIFI && workflowStatus === WORKFLOW_STATUS_IDLE)
+                || (connectionType === CONNECTION_TYPE_SERIAL && workflowState === WORKFLOW_STATE_IDLE)) {
+                server.startServerGcode({
+                    headType,
+                    workflowStatus,
+                    isLaserPrintAutoMode,
+                    materialThickness,
+                    isRotate,
+                    toolHead,
+                    // for wifi indiviual
+                    uploadName: gcodeFile.uploadName,
+                    series,
+                    laserFocalLength,
+                    background,
+                    size,
+                    workPosition,
+                    originOffset,
+                    // for serialport indiviual
+                    workflowState,
+                }, (res) => {
+                    if (res) {
+                        const { msg, code } = res;
+                        if (msg) {
+                            if (code === 202) {
                                 modalSmallHOC({
                                     title: i18n._('key-Workspace/Page-Filament Runout Recovery'),
                                     text: i18n._('key-Workspace/Page-Filament has run out. Please load new filament to continue printing.'),
                                     img: IMAGE_WIFI_ERROR
                                 });
-                            } else if (err.status === 203) {
+                            } else if (code === 203) {
                                 modalSmallHOC({
                                     title: i18n._('key-Workspace/Page-Enclosure Door Open'),
                                     text: i18n._('key-Workspace/Page-One or both of the enclosure panels is/are opened. Please close the panel(s) to continue printing.'),
@@ -329,75 +318,82 @@ class Visualizer extends PureComponent {
                                 });
                             } else {
                                 modalSmallHOC({
-                                    title: i18n._(`Error ${err.status}`),
+                                    title: i18n._(`Error ${code}`),
                                     text: i18n._('key-Workspace/Page-Unable to start the job.'),
                                     img: IMAGE_WIFI_ERROR
                                 });
                             }
                         }
-                    });
-                }
-                if (workflowStatus === WORKFLOW_STATUS_PAUSED) {
-                    this.props.resumeServerGcode((err) => {
-                        if (err) {
-                            if (err.status === 202) {
-                                modalSmallHOC({
-                                    title: i18n._('key-Workspace/Page-Filament Runout Recovery'),
-                                    text: i18n._('key-Workspace/Page-Filament has run out. Please load new filament to continue printing.'),
-                                    img: IMAGE_WIFI_ERROR
-                                });
-                            } else if (err.status === 203) {
-                                modalSmallHOC({
-                                    title: i18n._('key-Workspace/Page-Enclosure Door Open'),
-                                    text: i18n._('key-Workspace/Page-One or both of the enclosure panels is/are opened. Please close the panel(s) to continue printing.'),
-                                    subtext: i18n._('key-Workspace/Page-Please wait one second after you close the panel(s) to continue printing.'),
-                                    img: IMAGE_WIFI_WARNING
-                                });
-                            } else {
-                                modalSmallHOC({
-                                    title: i18n._(`Error ${err.status}`),
-                                    text: i18n._('key-Workspace/Page-Unable to resume the job.'),
-                                    img: IMAGE_WIFI_ERROR
-                                });
-                            }
+                    }
+                });
+            }
+
+            if ((connectionType === CONNECTION_TYPE_WIFI && workflowStatus === WORKFLOW_STATUS_PAUSED)
+                || (connectionType === CONNECTION_TYPE_SERIAL && workflowState === WORKFLOW_STATE_PAUSED)) {
+                server.resumeServerGcode({
+                    headType: this.props.headType,
+                    pause3dpStatus: this.props.pause3dpStatus,
+                    pauseStatus: this.pauseStatus
+                }, ({ msg, code }) => {
+                    if (msg) {
+                        if (code === 202) {
+                            modalSmallHOC({
+                                title: i18n._('key-Workspace/Page-Filament Runout Recovery'),
+                                text: i18n._('key-Workspace/Page-Filament has run out. Please load new filament to continue printing.'),
+                                img: IMAGE_WIFI_ERROR
+                            });
+                        } else if (code === 203) {
+                            modalSmallHOC({
+                                title: i18n._('key-Workspace/Page-Enclosure Door Open'),
+                                text: i18n._('key-Workspace/Page-One or both of the enclosure panels is/are opened. Please close the panel(s) to continue printing.'),
+                                subtext: i18n._('key-Workspace/Page-Please wait one second after you close the panel(s) to continue printing.'),
+                                img: IMAGE_WIFI_WARNING
+                            });
+                        } else {
+                            modalSmallHOC({
+                                title: i18n._(`Error ${code}`),
+                                text: i18n._('key-Workspace/Page-Unable to resume the job.'),
+                                img: IMAGE_WIFI_ERROR
+                            });
                         }
-                    });
-                }
+                    }
+                });
             }
         },
         tryPause: () => {
             // delay 500ms to let buffer executed. and status propagated
             setTimeout(() => {
-                if (this.state.gcode.received >= this.state.gcode.sent) {
+                if (this.state.gcode.received + 1 >= this.state.gcode.sent) {
                     this.pauseStatus = {
                         headStatus: this.state.controller.state.headStatus,
                         headPower: this.state.controller.state.headPower
                     };
-
                     if (this.pauseStatus.headStatus) {
-                        controller.command('gcode', 'M5');
+                        this.props.executeGcode('M5');
                     }
 
                     // toolhead has stopped
-                    if (this.pause3dpStatus.pausing) {
-                        this.pause3dpStatus.pausing = false;
+                    if (this.props.pause3dpStatus?.pausing) {
+                        const pause3dpStatus = {};
+                        pause3dpStatus.pausing = false;
                         const workPosition = this.state.workPosition;
-                        this.pause3dpStatus.pos = {
+                        pause3dpStatus.pos = {
                             x: Number(workPosition.x),
                             y: Number(workPosition.y),
                             z: Number(workPosition.z),
                             e: Number(workPosition.e)
                         };
-                        const pos = this.pause3dpStatus.pos;
+                        const pos = pause3dpStatus.pos;
                         // experience params for retraction: F3000, E->(E-5)
                         const targetE = Math.max(pos.e - 5, 0);
                         const targetZ = Math.min(pos.z + 30, this.props.size.z);
-                        const cmd = [
+                        const gcode = [
                             `G1 F3000 E${targetE}\n`,
                             `G1 Z${targetZ} F3000\n`,
                             `G1 F100 E${pos.e}\n`
                         ];
-                        controller.command('gcode', cmd);
+                        this.props.executeGcode(gcode);
+                        this.props.updatePause3dpStatus(pause3dpStatus);
                     }
                 } else {
                     this.actions.tryPause();
@@ -405,40 +401,39 @@ class Visualizer extends PureComponent {
             }, 50);
         },
         handlePause: () => {
-            const { connectionType } = this.props;
-            if (connectionType === CONNECTION_TYPE_SERIAL) {
-                const { workflowState } = this.state;
-                if ([WORKFLOW_STATE_RUNNING].includes(workflowState)) {
-                    controller.command('gcode:pause');
-
-                    if (this.actions.is3DP()) {
-                        this.pause3dpStatus.pausing = true;
-                        this.pause3dpStatus.pos = null;
+            const { workflowStatus, connectionType, server } = this.props;
+            const { workflowState } = this.state;
+            if (this.actions.is3DP()) {
+                this.props.updatePause3dpStatus({
+                    pausing: true,
+                    pos: null
+                });
+            }
+            if (connectionType === CONNECTION_TYPE_WIFI && workflowStatus === WORKFLOW_STATUS_RUNNING
+                || connectionType === CONNECTION_TYPE_SERIAL && workflowState === WORKFLOW_STATE_RUNNING) {
+                server.pauseServerGcode(() => {
+                    if (connectionType === CONNECTION_TYPE_SERIAL) {
+                        this.actions.tryPause();
                     }
-
-                    this.actions.tryPause();
-                }
-            } else {
-                const { workflowStatus } = this.props;
-                if (workflowStatus === WORKFLOW_STATUS_RUNNING) {
-                    this.props.pauseServerGcode();
-                }
+                });
             }
         },
         handleStop: () => {
-            const { connectionType } = this.props;
-            if (connectionType === CONNECTION_TYPE_SERIAL) {
-                // const { workflowState } = this.state;
-                // if ([WORKFLOW_STATE_PAUSED].includes(workflowState)) {
-                // TODO why cannot stop direct ??? Should pause first now.
-                this.actions.handlePause();
-                controller.command('gcode:stop');
-                // }
-            } else {
-                const { workflowStatus } = this.props;
-                if (workflowStatus !== WORKFLOW_STATUS_IDLE) {
-                    this.props.stopServerGcode();
-                }
+            const { workflowState } = this.state;
+            const { workflowStatus, server, connectionType } = this.props;
+            if (this.actions.is3DP()) {
+                this.props.updatePause3dpStatus({
+                    pausing: true,
+                    pos: null
+                });
+            }
+            if (connectionType === CONNECTION_TYPE_WIFI && workflowStatus !== WORKFLOW_STATUS_IDLE
+                || connectionType === CONNECTION_TYPE_SERIAL && workflowState !== WORKFLOW_STATE_IDLE) {
+                server.stopServerGcode(() => {
+                    if (connectionType === CONNECTION_TYPE_SERIAL) {
+                        this.actions.tryPause();
+                    }
+                });
             }
         },
         handleClose: () => {
@@ -446,7 +441,7 @@ class Visualizer extends PureComponent {
             this.props.clearGcode();
             const { workflowState } = this.state;
             if ([WORKFLOW_STATE_IDLE].includes(workflowState)) {
-                controller.command('gcode:unload');
+                this.props.executeGcode(null, null, 'gcode:unload');
             }
         },
         // canvas
@@ -554,7 +549,7 @@ class Visualizer extends PureComponent {
         if (this.props.workflowStatus !== WORKFLOW_STATUS_PAUSED && nextProps.workflowStatus === WORKFLOW_STATUS_PAUSED) {
             this.stopToolheadRotationAnimation();
         }
-        if (nextProps.gcodePrintingInfo.sent > 0 && nextProps.gcodePrintingInfo.sent !== this.props.gcodePrintingInfo.sent) {
+        if (nextProps.gcodePrintingInfo && nextProps.gcodePrintingInfo.sent > 0 && nextProps.gcodePrintingInfo.sent !== this.props.gcodePrintingInfo.sent) {
             this.updateWorkPosition(this.props.workPosition);
             this.props.setGcodePrintingIndex(nextProps.gcodePrintingInfo.sent);
             this.renderScene();
@@ -682,7 +677,7 @@ class Visualizer extends PureComponent {
     }
 
     startToolheadRotationAnimation() {
-        this.toolheadRotationAnimation.start();
+        this.toolheadRotationAnimation && this.toolheadRotationAnimation.start();
     }
 
     stopToolheadRotationAnimation() {
@@ -756,16 +751,6 @@ class Visualizer extends PureComponent {
                 <div className={styles['canvas-wrapper']}>
                     {this.props.uploadState === 'uploading' && <Loading />}
                     {this.props.renderState === 'rendering' && <Rendering />}
-                    {/* <div className="position-ab top-left-16">
-                        <WorkflowControl
-                            workflowStatus={this.props.workflowStatus}
-                            isConnected={this.props.isConnected}
-                            connectionType={this.props.connectionType}
-                            state={state}
-                            actions={this.actions}
-                            uploadState={this.props.uploadState}
-                        />
-                    </div> */}
                     {state.printableArea && (
                         <Canvas
                             ref={this.canvas}
@@ -830,41 +815,53 @@ class Visualizer extends PureComponent {
 const mapStateToProps = (state) => {
     const machine = state.machine;
     const workspace = state.workspace;
+    const laser = state.laser;
+
     return {
         size: workspace.size,
+        server: machine.server,
+        pause3dpStatus: machine.pause3dpStatus,
         doorSwitchCount: machine.doorSwitchCount,
         isEmergencyStopped: machine.isEmergencyStopped,
         isEnclosureDoorOpen: machine.isEnclosureDoorOpen,
         laser10WErrorState: machine.laser10WErrorState,
         headType: workspace.headType,
+        toolHead: workspace.toolHead,
         workflowStatus: machine.workflowStatus,
         isConnected: machine.isConnected,
         connectionType: machine.connectionType,
         uploadState: workspace.uploadState,
         gcodeList: workspace.gcodeList,
         gcodeFile: workspace.gcodeFile,
+
         gcodePrintingInfo: machine.gcodePrintingInfo,
         workPosition: machine.workPosition,
+        isLaserPrintAutoMode: machine.isLaserPrintAutoMode,
+        // type
+        materialThickness: machine.materialThickness,
+        background: laser.background,
+        isRotate: workspace.isRotate,
+        // type
+        laserFocalLength: machine.laserFocalLength,
+        originOffset: machine.originOffset,
+
         modelGroup: workspace.modelGroup,
+        series: workspace.series,
         renderState: workspace.renderState,
         boundingBox: workspace.boundingBox,
         renderingTimestamp: workspace.renderingTimestamp,
         stage: workspace.stage,
         progress: workspace.progress,
-        materialThickness: machine.materialThickness
     };
 };
 
 const mapDispatchToProps = (dispatch) => ({
-    clearGcode: () => dispatch(actions.clearGcode()),
-    unloadGcode: () => dispatch(actions.unloadGcode()),
-    setGcodePrintingIndex: (index) => dispatch(actions.setGcodePrintingIndex(index)),
+    clearGcode: () => dispatch(workspaceActions.clearGcode()),
+    unloadGcode: () => dispatch(workspaceActions.unloadGcode()),
+    setGcodePrintingIndex: (index) => dispatch(workspaceActions.setGcodePrintingIndex(index)),
 
-    startServerGcode: (callback) => dispatch(machineActions.startServerGcode(callback)),
-    pauseServerGcode: () => dispatch(machineActions.pauseServerGcode()),
-    resumeServerGcode: (callback) => dispatch(machineActions.resumeServerGcode(callback)),
-    stopServerGcode: () => dispatch(machineActions.stopServerGcode()),
-    executeGcode: (gcode) => dispatch(machineActions.executeGcode(gcode))
+    executeGcode: (gcode, context, cmd) => dispatch(machineActions.executeGcode(gcode, context, cmd)),
+    updatePause3dpStatus: (pause3dpStatus) => dispatch(machineActions.updatePause3dpStatus(pause3dpStatus))
 });
 
 export default connect(mapStateToProps, mapDispatchToProps)(Visualizer);

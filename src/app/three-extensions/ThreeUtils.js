@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { EPS } from '../lib/numeric-utils';
 
 const ThreeUtils = {
     getQuaternionBetweenVector3(v1, v2) {
@@ -77,7 +78,7 @@ const ThreeUtils = {
     setObjectWorldPosition(object, position) {
         const parent = object.parent;
         parent.updateMatrixWorld();
-        const matrix = new THREE.Matrix4().getInverse(parent.matrixWorld);
+        const matrix = new THREE.Matrix4().copy(parent.matrixWorld).invert();
         position.applyMatrix4(matrix);
         object.position.copy(position);
     },
@@ -91,7 +92,7 @@ const ThreeUtils = {
         object.setRotationFromQuaternion(quaternion);
 
         const parentQuaternion = ThreeUtils.getObjectWorldQuaternion(object.parent);
-        object.applyQuaternion(parentQuaternion.inverse());
+        object.applyQuaternion(parentQuaternion.invert());
     },
 
     scaleObjectToWorldSize(object, targetSize, pivot) {
@@ -172,11 +173,11 @@ const ThreeUtils = {
 
         this.removeObjectParent(obj);
         parent.updateMatrixWorld();
-        obj.applyMatrix4(new THREE.Matrix4().getInverse(parent.matrixWorld));
+        obj.applyMatrix4(new THREE.Matrix4().copy(parent.matrixWorld).invert());
         parent.add(obj);
     },
     applyObjectMatrix(obj, matrix) {
-        const inverse = new THREE.Matrix4().getInverse(matrix);
+        const inverse = new THREE.Matrix4().copy(matrix).invert();
         obj.children.forEach(child => {
             child.applyMatrix4(inverse);
         });
@@ -188,7 +189,7 @@ const ThreeUtils = {
         const child = obj.children[0];
         const m = child.matrix;
         obj.applyMatrix4(m);
-        child.applyMatrix4(new THREE.Matrix4().getInverse(m));
+        child.applyMatrix4(new THREE.Matrix4().copy(m).invert());
     },
     // eslint-disable-next-line func-names
     computeBoundingBox: (function () {
@@ -239,7 +240,7 @@ const ThreeUtils = {
             obj.updateMatrixWorld();
             if (obj.geometry) {
                 const isChildrenMatrixChanged = obj.children.some((child, j) => !(cache.childrenMatrix[j] && child.matrixWorld.equals(cache.childrenMatrix[j])));
-                if (lastBbox.isEmpty() || !lastMatrix.equals(obj.matrixWorld) || isChildrenMatrixChanged) {
+                if (lastBbox.isEmpty() || !lastMatrix.equals(obj.matrixWorld) || isChildrenMatrixChanged || obj.children.length !== cache.childrenMatrix.length) {
                     cache.childrenMatrix = obj.children.map(child => child.matrixWorld.clone());
                     lastBbox.copy(initialBox);
                     compute(obj, lastBbox);
@@ -336,8 +337,8 @@ const ThreeUtils = {
     },
 
     isReverseEdge(e1, e2) {
-        return e1[0].x === e2[1].x && e1[0].y === e2[1].y && e1[0].z === e2[1].z
-        && e2[0].x === e1[1].x && e2[0].y === e1[1].y && e2[0].z === e1[1].z;
+        return Math.abs(e1[0].x - e2[1].x) < EPS && Math.abs(e1[0].y - e2[1].y) < EPS && Math.abs(e1[0].z - e2[1].z) < EPS
+        && Math.abs(e2[0].x - e1[1].x) < EPS && Math.abs(e2[0].y - e1[1].y) < EPS && Math.abs(e2[0].z - e1[1].z) < EPS;
     },
 
     checkEdgeAvailable(newEdge, edges) {
@@ -359,14 +360,22 @@ const ThreeUtils = {
         const tempEdges = edges.slice(1);
         const arrangedEdges = [edge];
         while (tempEdges.length > 0) {
+            let found = false;
             for (let j = tempEdges.length - 1; j > -1; j--) {
                 const edgeChecked = tempEdges[j];
-                if (edge[1].x === edgeChecked[0].x && edge[1].y === edgeChecked[0].y && edge[1].z === edgeChecked[0].z) {
+                if (Math.abs(edge[1].x - edgeChecked[0].x) < EPS
+                    && Math.abs(edge[1].y - edgeChecked[0].y) < EPS
+                    && Math.abs(edge[1].z - edgeChecked[0].z) < EPS
+                ) {
                     arrangedEdges.push(edgeChecked);
                     edge = edgeChecked;
                     tempEdges.splice(j, 1);
+                    found = true;
                     break;
                 }
+            }
+            if (!found) {
+                break;
             }
         }
         return arrangedEdges;

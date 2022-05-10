@@ -2,9 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { shallowEqual, useSelector, useDispatch } from 'react-redux';
 import PropTypes from 'prop-types';
 import { useHistory, withRouter } from 'react-router-dom';
-import { includes } from 'lodash';
+import { includes, throttle } from 'lodash';
+import isElectron from 'is-electron';
+import i18next from 'i18next';
 // import { Steps } from 'intro.js-react';
 import 'intro.js/introjs.css';
+import { Trans } from 'react-i18next';
 import PrintingVisualizer from '../widgets/PrintingVisualizer';
 // import PrintingOutput from '../widgets/PrintingOutput';
 import PrintingManager from '../views/PrintingManager';
@@ -15,7 +18,7 @@ import { actions as printingActions } from '../../flux/printing';
 import { actions as projectActions } from '../../flux/project';
 import ProjectLayout from '../layouts/ProjectLayout';
 import MainToolBar from '../layouts/MainToolBar';
-import { HEAD_PRINTING } from '../../constants';
+import { HEAD_PRINTING, ROTATE_MODE } from '../../constants';
 import { renderPopup, renderWidgetList, logPageView, useUnsavedTitle } from '../utils';
 import { machineStore } from '../../store/local-storage';
 
@@ -49,7 +52,15 @@ import {
 } from './introContent';
 import '../../styles/introCustom.styl';
 import Steps from '../components/Steps';
+import Modal from '../components/Modal';
+import { Button } from '../components/Buttons';
 
+export const openFolder = () => {
+    if (isElectron()) {
+        const ipc = window.require('electron').ipcRenderer;
+        ipc.send('open-recover-folder');
+    }
+};
 const allWidgets = {
     'control': ControlWidget,
     'connection': ConnectionWidget,
@@ -80,11 +91,13 @@ const allWidgets = {
 const pageHeadType = HEAD_PRINTING;
 function useRenderMainToolBar() {
     const unSaved = useSelector(state => state?.project[pageHeadType]?.unSaved, shallowEqual);
-    const models = useSelector(state => state?.printing?.modelGroup?.getModels(), shallowEqual);
     const inProgress = useSelector(state => state?.printing?.inProgress, shallowEqual);
     const enableShortcut = useSelector(state => state?.printing?.enableShortcut, shallowEqual);
     const canRedo = useSelector(state => state?.printing?.history?.canRedo, shallowEqual);
     const canUndo = useSelector(state => state?.printing?.history?.canUndo, shallowEqual);
+    const canGroup = useSelector(state => state?.printing?.modelGroup?.canGroup());
+    const canMerge = useSelector(state => state?.printing?.modelGroup?.canMerge());
+    const canUngroup = useSelector(state => state?.printing?.modelGroup?.canUngroup());
     const [showHomePage, setShowHomePage] = useState(false);
     const [showWorkspace, setShowWorkspace] = useState(false);
     const dispatch = useDispatch();
@@ -139,7 +152,7 @@ function useRenderMainToolBar() {
             },
             {
                 title: i18n._('key-Printing/Page-Save'),
-                disabled: !unSaved || !models?.length || !enableShortcut,
+                disabled: !unSaved || !enableShortcut,
                 type: 'button',
                 name: 'MainToolbarSave',
                 iconClassName: 'printing-save-icon',
@@ -164,11 +177,40 @@ function useRenderMainToolBar() {
                 action: () => {
                     dispatch(printingActions.redo());
                 }
+            },
+            {
+                title: i18n._('key-3DP/MainToolBar-Align'),
+                disabled: !canMerge || !enableShortcut,
+                type: 'button',
+                name: 'MainToolbarMerge',
+                action: () => {
+                    dispatch(printingActions.groupAndAlign());
+                }
+            },
+            {
+                title: i18n._('key-3DP/MainToolBar-Group'),
+                disabled: !canGroup || !enableShortcut,
+                type: 'button',
+                name: 'MainToolbarGroup',
+                action: () => {
+                    dispatch(printingActions.group());
+                }
+            },
+            {
+                title: i18n._('key-3DP/MainToolBar-Ungroup'),
+                disabled: !canUngroup || !enableShortcut,
+                type: 'button',
+                name: 'MainToolbarUngroup',
+                action: () => {
+                    dispatch(printingActions.ungroup());
+                }
             }
         ];
         return (
             <MainToolBar
                 leftItems={leftItems}
+                lang={i18next.language}
+                headType={HEAD_PRINTING}
             />
         );
     }
@@ -182,20 +224,50 @@ function Printing({ location }) {
     const [isDraggingWidget, setIsDraggingWidget] = useState(false);
     const [enabledIntro, setEnabledIntro] = useState(null);
     const [initIndex, setInitIndex] = useState(0);
+    // const [rotateInputValue, setRotateInputValue] = useState(null);
+    // const [rotateAxis, setRotateAxis] = useState('x');
+    const [controlInputValue, setControlInputValue] = useState(null);
+    const [controlAxis, setControlAxis] = useState(['x']);
+    const [controlMode, setControlMode] = useState(null);
     const dispatch = useDispatch();
     const history = useHistory();
     const [renderHomepage, renderMainToolBar, renderWorkspace] = useRenderMainToolBar();
     const modelGroup = useSelector(state => state.printing.modelGroup);
+    const isNewUser = useSelector(state => state.printing.isNewUser);
     const thumbnail = useRef();
     const stepRef = useRef();
     useUnsavedTitle(pageHeadType);
-
+    const [showTipModal, setShowTipModal] = useState(!isNewUser);
+    const updateControlInput = (event) => {
+        const { detail } = event;
+        throttle(() => {
+            setControlMode(detail.controlValue.mode);
+            if (detail.controlValue.mode === ROTATE_MODE && detail.controlValue.axis === null) {
+                setControlInputValue(null);
+            } else {
+                if (detail.controlValue.axis) {
+                    setControlAxis(detail.controlValue.axis.split(''));
+                }
+                setControlInputValue({ ...detail.controlValue.data });
+            }
+        }, 1000)();
+    };
     useEffect(() => {
         dispatch(printingActions.init());
+        dispatch(printingActions.checkNewUser());
         logPageView({
             pathname: '/printing'
         });
+        window.addEventListener('update-control-input', updateControlInput);
+        return () => {
+            window.removeEventListener('update-control-input', updateControlInput);
+        };
     }, []);
+    useEffect(() => {
+        const readTip = machineStore.get('readTip', false);
+        setShowTipModal(!isNewUser && !readTip);
+    }, [isNewUser]);
+
     useEffect(() => {
         if (location?.state?.shouldShowGuideTours) {
             setEnabledIntro(true);
@@ -212,9 +284,9 @@ function Printing({ location }) {
         }
     }, [enabledIntro]);
 
-    async function onDropAccepted(file) {
+    async function onDropAccepted(files) {
         try {
-            await dispatch(printingActions.uploadModel(file));
+            await dispatch(printingActions.uploadModel(files));
         } catch (e) {
             modal({
                 title: i18n._('key-Printing/Page-Failed to open model.'),
@@ -279,6 +351,10 @@ function Printing({ location }) {
         // machineStore.set('guideTours.guideTours3dp', true); // mock   ---> true
         setEnabledIntro(false);
     };
+    const handleCloseTipModal = () => {
+        setShowTipModal(false);
+        machineStore.set('readTip', true);
+    };
 
     return (
         <ProjectLayout
@@ -287,13 +363,14 @@ function Printing({ location }) {
             renderModalView={renderModalView}
         >
             <Dropzone
+                multiple
                 disabled={isDraggingWidget}
                 accept=".stl, .obj"
                 dragEnterMsg={i18n._('key-Printing/Page-Drop an STL/OBJ file here.')}
                 onDropAccepted={onDropAccepted}
                 onDropRejected={onDropRejected}
             >
-                <PrintingVisualizer widgetId="printingVisualizer" />
+                <PrintingVisualizer widgetId="printingVisualizer" controlInputValue={controlInputValue} controlAxis={controlAxis} controlMode={controlMode} />
                 {renderHomepage()}
                 {renderWorkspace()}
                 {enabledIntro && (
@@ -367,6 +444,38 @@ function Printing({ location }) {
                 ref={thumbnail}
                 modelGroup={modelGroup}
             />
+            {showTipModal && (
+                <Modal
+                    onClose={handleCloseTipModal}
+                    centered
+                    zIndex={100001000}
+                >
+                    <Modal.Header>
+                        {i18n._('key-Printing/Modal-Profile migrated')}
+                    </Modal.Header>
+                    <Modal.Body>
+                        <div className="width-432">
+                            <span>
+                                {i18n._('key-Printing/Modal-Retraction profile migrated')},
+                                <a href="https://support.snapmaker.com/hc/en-us/articles/4438318910231-Retract-Z-Hop-Migrated-from-Printing-Settings-to-Material-Settings" target="_blank" rel="noreferrer" className="link-text">{i18n._('key-Printing/Modal-Click here to learn more')}</a>.
+                            </span>
+                            <Trans i18nKey="key-Printing/Modal-Backup Tip">
+                                For your historical data back up in <span role="presentation" onClick={openFolder} className="link-text">here</span>.
+                            </Trans>
+                        </div>
+                    </Modal.Body>
+                    <Modal.Footer>
+                        <Button
+                            priority="level-two"
+                            type="primary"
+                            width="96px"
+                            onClick={handleCloseTipModal}
+                        >
+                            {i18n._('key-Printing/Modal-Got it')}
+                        </Button>
+                    </Modal.Footer>
+                </Modal>
+            )}
         </ProjectLayout>
     );
 }

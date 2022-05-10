@@ -1,8 +1,10 @@
 {
-    "name": "High Quality",
-    "version": 2,
-    "inherits": "snapmaker2",
+    "version": "4.2.0",
     "category": "Default",
+    "name": "High Quality",
+    "i18nName": "key-default_name-High Quality",
+    "i18nCategory": "key-default_category-Default",
+    "inherits": "snapmaker2",
     "overrides": {
         "resolution": {
             "type": "category",
@@ -12,12 +14,16 @@
                     "label": "Layer Height"
                 },
                 "layer_height_0": {
-                    "default_value": 0.16,
+                    "default_value": 0.28,
                     "label": "Initial Layer Height"
                 },
                 "initial_layer_line_width_factor": {
-                    "default_value": 100,
+                    "default_value": 150,
                     "label": "Initial Layer Line Width"
+                },
+                "material_flow_layer_0": {
+                    "default_value": 100,
+                    "label": "Initial Layer Flow"
                 }
             }
         },
@@ -27,10 +33,6 @@
                 "wall_thickness": {
                     "default_value": 1.2,
                     "label": "Wall Thickness"
-                },
-                "wall_line_count": {
-                    "default_value": 3,
-                    "label": "Wall Line Count"
                 },
                 "top_thickness": {
                     "default_value": 0.8,
@@ -60,10 +62,6 @@
         "infill": {
             "type": "category",
             "children": {
-                "infill_line_distance": {
-                    "default_value": 8,
-                    "label": "Infill Line Distance"
-                },
                 "infill_sparse_density": {
                     "default_value": 15,
                     "label": "Infill Density"
@@ -98,26 +96,6 @@
                 }
             }
         },
-        "material": {
-            "type": "category",
-            "children": {
-                "retraction_enable": {
-                    "default_value": true,
-                    "label": "Enable Retraction"
-                },
-                "retraction_speed": {
-                    "default_value": 60,
-                    "label": "Retraction Speed"
-                },
-                "retraction_amount": {
-                    "default_value": 5,
-                    "label": "Retraction Distance"
-                },
-                "retract_at_layer_change": {
-                    "default_value": false
-                }
-            }
-        },
         "speed": {
             "type": "category",
             "children": {
@@ -145,7 +123,7 @@
                     "label": "Infill Speed"
                 },
                 "speed_print_layer_0": {
-                    "default_value": 18,
+                    "default_value": 40,
                     "label": "Initial Layer Printing Speed"
                 },
                 "speed_travel_layer_0": {
@@ -159,17 +137,6 @@
                 "speed_print": {
                     "label": "Printing Speed",
                     "default_value": 40
-                }
-            }
-        },
-        "travel": {
-            "type": "category",
-            "children": {
-                "retraction_hop": {
-                    "default_value": 1
-                },
-                "retraction_hop_enabled": {
-                    "default_value": false
                 }
             }
         },

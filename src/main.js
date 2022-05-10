@@ -1,26 +1,43 @@
 import 'core-js/stable';
 import 'regenerator-runtime/runtime';
-import { app, BrowserWindow, screen, ipcMain } from 'electron';
+import { app, BrowserWindow, protocol, screen, session, ipcMain, shell, Menu } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import Store from 'electron-store';
+import url from 'url';
+import fs from 'fs';
 import { isUndefined, isNull } from 'lodash';
 import path from 'path';
 import { configureWindow } from './electron-app/window';
 import MenuBuilder, { addRecentFile, cleanAllRecentFiles } from './electron-app/Menu';
-import launchServer from './server-cli';
 import DataStorage from './DataStorage';
 import pkg from './package.json';
 // const { crashReporter } = require('electron');
 
-
 const config = new Store();
-
+const userDataDir = app.getPath('userData');
+global.luban = {
+    userDataDir
+};
 let serverData = null;
 let mainWindow = null;
+// https://www.electronjs.org/docs/latest/breaking-changes#planned-breaking-api-changes-100
+// console.log('getCrashesDirectory', app.getPath('crashDumps'));
+let loadUrl = '';
+const loadingMenu = [{
+    id: 'file',
+    label: '',
+}];
+
+const childProcess = require('child_process');
+
+const SERVER_DATA = 'serverData';
+const UPLOAD_WINDOWS = 'uploadWindows';
+
+const { CLIENT_PORT, SERVER_PORT } = pkg.config;
 
 // crashReporter.start({
 //     productName: 'Snapmaker',
-//     companyName: 'Snapmaker',
+//     globalExtra: { _companyName: 'Snapmaker' },
 //     submitURL: 'https://api.snapmaker.com',
 //     uploadToServer: true
 // });
@@ -34,8 +51,12 @@ function getBrowserWindowOptions() {
         show: false,
         useContentSize: true,
         title: `${pkg.name} ${pkg.version}`,
+        // https://www.electronjs.org/docs/latest/breaking-changes#default-changed-enableremotemodule-defaults-to-false
         webPreferences: {
-            nodeIntegration: true
+            nodeIntegration: true,
+            contextIsolation: false,
+            enableRemoteModule: true,
+            nodeIntegrationInWorker: true
         }
     };
 
@@ -98,10 +119,10 @@ function sendUpdateMessage(text) {
 // handle update issue
 function updateHandle() {
     const message = {
-        error: 'An error occurred while checking for updates.',
-        checking: 'Checking for updates.',
-        updateAva: 'Updates are available.',
-        updateNotAva: 'Snapmaker Luban is up to date.'
+        error: 'key-settings_message-error',
+        checking: 'key-settings_message-checking',
+        updateAva: 'key-settings_message-updateAva',
+        updateNotAva: 'key-settings_message-update_not_ava'
     };
     // Official document: https://www.electron.build/auto-update.html
     autoUpdater.autoDownload = false;
@@ -118,7 +139,7 @@ function updateHandle() {
     // Emitted when there is an available update. The update is downloaded automatically if autoDownload is true.
     autoUpdater.on('update-available', (downloadInfo) => {
         sendUpdateMessage(message.updateAva);
-        mainWindow.webContents.send('update-available', downloadInfo, app.getVersion());
+        mainWindow.webContents.send('update-available', { ...downloadInfo, prevVersion: app.getVersion() });
     });
     // Emitted when there is no available update.
     autoUpdater.on('update-not-available', () => {
@@ -151,6 +172,9 @@ function updateHandle() {
     ipcMain.on('updateShouldCheckForUpdate', (event, shouldCheckForUpdate) => {
         mainWindow.webContents.send('update-should-check-for-update', shouldCheckForUpdate);
     });
+    ipcMain.on('open-saved-path', (event, savedPath) => {
+        shell.openPath(savedPath);
+    });
 }
 
 // https://github.com/electron/electron/blob/v8.5.1/docs/api/app.md#apprequestsingleinstancelock
@@ -175,42 +199,129 @@ if (process.platform === 'win32') {
     }
 }
 
-const showMainWindow = async () => {
+const startToBegin = (data) => {
+    serverData = data;
+    const { address, port } = { ...serverData };
+    configureWindow(mainWindow);
+    loadUrl = `http://${address}:${port}`;
+    const filter = {
+        urls: [
+            // 'http://*/',
+            'http://*/resources/images/*',
+            'http://*/app.css',
+            'http://*/polyfill.*.*',
+            'http://*/vendor.*.*',
+            'http://*/app.*.*',
+            'http://*/*/*.worker.js',
+        ]
+    };
+    protocol.registerFileProtocol(
+        'luban',
+        (request, callback) => {
+            const { pathname } = url.parse(request.url);
+            const p = pathname === '/' ? 'index.html' : pathname.substr(1);
+            callback(fs.createReadStream(path.normalize(`${__dirname}/app/${p}`)));
+        },
+        (error) => {
+            if (error) {
+                console.error('error', error);
+            }
+        }
+    );
+    // https://github.com/electron/electron/issues/21675
+    // If needed, resolve CORS. https://stackoverflow.com/questions/51254618/how-do-you-handle-cors-in-an-electron-app
+
+    session.defaultSession.webRequest.onBeforeRequest(
+        filter,
+        (request, callback) => {
+            const redirectURL = request.url.replace(/^http/, 'luban');
+            callback({ redirectURL });
+        }
+    );
+
+    // Ignore proxy settings
+    // https://electronjs.org/docs/api/session#sessetproxyconfig-callback
+
+    const webContentsSession = mainWindow.webContents.session;
+    webContentsSession.setProxy({ proxyRules: 'direct://' })
+        .then(() => mainWindow.loadURL(loadUrl).catch(err => {
+            console.log('err', err.message);
+        }));
+
     try {
         // TODO: move to server
         DataStorage.init();
     } catch (err) {
         console.error('Error: ', err);
     }
+};
 
-    if (!serverData) {
-        // only start server once
-        // TODO: start server on the outermost
-        serverData = await launchServer();
-    }
-
-    const { address, port } = { ...serverData };
+const showMainWindow = async () => {
     const windowOptions = getBrowserWindowOptions();
     const window = new BrowserWindow(windowOptions);
     mainWindow = window;
     if (process.platform === 'win32') {
-        const outsideX = -999999, outsideY = -999999;
-        window.setSkipTaskbar(true);
-        window.blur();
-        window.setPosition(outsideX, outsideY, false);
+        const menu = Menu.buildFromTemplate(loadingMenu);
+        Menu.setApplicationMenu(menu);
     }
-    window.show();
 
-    configureWindow(window);
-
-    const loadUrl = `http://${address}:${port}`;
-
-    // Ignore proxy settings
-    // https://electronjs.org/docs/api/session#sessetproxyconfig-callback
-
-    const session = window.webContents.session;
-    session.setProxy({ proxyRules: 'direct://' })
-        .then(() => window.loadURL(loadUrl));
+    if (!serverData) {
+        // only start server once
+        if (process.env.NODE_ENV === 'development') {
+            process.chdir(path.resolve(__dirname, 'server'));
+            // Use require instead of import to avoid being precompiled in production mode
+            const { createServer } = require('./server');
+            createServer({
+                port: SERVER_PORT,
+                host: '127.0.0.1'
+            }, (err, data) => {
+                startToBegin({ ...data, port: CLIENT_PORT });
+            });
+        } else {
+            const child = childProcess.fork(
+                path.resolve(__dirname, 'server-cli.js'),
+                [],
+                {
+                    env: {
+                        ...process.env,
+                        USER_DATA_DIR: userDataDir
+                    }
+                }
+            );
+            child.on('message', (data) => {
+                if (data.type === SERVER_DATA) {
+                    startToBegin(data);
+                } else if (data.type === UPLOAD_WINDOWS) {
+                    window.loadURL(loadUrl).catch(err => {
+                        console.log('err', err.message);
+                    });
+                }
+            });
+        }
+        // window.webContents.openDevTools();
+        window.loadURL(path.resolve(__dirname, 'app', 'loading.html'))
+            .then(() => window.setTitle(`Snapmaker Luban ${pkg.version}`))
+            .catch(err => {
+                console.log('err', err.message);
+            });
+        window.setBackgroundColor('#f5f5f7');
+        if (process.platform === 'win32') {
+            window.show();
+        } else {
+            window.on('ready-to-show', () => {
+                window.show();
+            });
+        }
+        // serverData = await launchServer();
+    } else {
+        if (process.platform === 'win32') {
+            window.show();
+        } else {
+            window.on('ready-to-show', () => {
+                window.show();
+            });
+        }
+    }
 
     window.on('close', (e) => {
         e.preventDefault();
@@ -251,58 +362,19 @@ const showMainWindow = async () => {
     });
 
     ipcMain.on('add-recent-file', (event, file) => {
-        console.log('main add-recent-file', event, file);
         addRecentFile(file);
+    });
+
+    ipcMain.on('open-recover-folder', () => {
+        shell.openPath(`${userDataDir}/snapmaker-recover`);
     });
 
     updateHandle();
 };
 
-const createWindow = () => {
-    // MenuBuilder.hideMenu();
-    if (process.platform === 'win32') {
-        const windowOptions = getBrowserWindowOptions();
-        const loadingWindow = new BrowserWindow(windowOptions);
-        loadingWindow.setMenuBarVisibility(false);
-        loadingWindow.setResizable(false);
-        loadingWindow.loadURL(path.resolve(__dirname, 'app', 'loading.html'));
-        loadingWindow.once('ready-to-show', () => {
-            ipcMain.once('show-main-window', () => {
-                if (loadingWindow.isMinimized()) {
-                    loadingWindow.restore();
-                } else if (loadingWindow.isMaximized()) {
-                    mainWindow.maximize();
-                }
-                const [x, y] = loadingWindow.getPosition();
-                const outsideX = -999999, outsideY = -999999;
-                mainWindow.setPosition(x, y, false);
-                mainWindow.moveTop();
-                mainWindow.setSkipTaskbar(false);
-                loadingWindow.setSkipTaskbar(true);
-                loadingWindow.setPosition(outsideX, outsideY, false);
-                mainWindow.focus();
-                loadingWindow.close();
-            });
-            loadingWindow.once('show', () => {
-                setTimeout(() => {
-                    showMainWindow();
-                }, 50);
-            });
-            loadingWindow.show();
-        });
-        loadingWindow.once('close', () => {
-            if (!mainWindow || !mainWindow.isFocused()) {
-                process.exit(0);
-            }
-        });
-    } else {
-        showMainWindow();
-    }
-};
-
 // Allow max 4G memory usage
 if (process.arch === 'x64') {
-    app.commandLine.appendSwitch('--js-flags', '--max-old-space-size=4096');
+    app.commandLine.appendSwitch('--js-flags', '--max-old-space-size=6144');
 }
 
 app.commandLine.appendSwitch('ignore-gpu-blacklist');
@@ -313,7 +385,7 @@ app.commandLine.appendSwitch('ignore-gpu-blacklist');
  */
 app.on('activate', async () => {
     if (mainWindow === null) {
-        await createWindow();
+        await showMainWindow();
     }
 });
 
@@ -376,8 +448,9 @@ app.on('second-instance', (event, commandLine) => {
         }
     }
 });
+protocol.registerSchemesAsPrivileged([{ scheme: 'luban', privileges: { standard: true } }]);
 
 /**
  * when ready
  */
-app.whenReady().then(createWindow);
+app.whenReady().then(showMainWindow);

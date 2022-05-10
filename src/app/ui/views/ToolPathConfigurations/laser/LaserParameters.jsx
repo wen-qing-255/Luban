@@ -21,7 +21,8 @@ class LaserParameters extends PureComponent {
 
         // size: PropTypes.object.isRequired,
         multipleEngine: PropTypes.bool.isRequired,
-        materials: PropTypes.object.isRequired
+        materials: PropTypes.object.isRequired,
+        isModel: PropTypes.bool
     };
 
     state = {
@@ -58,8 +59,8 @@ class LaserParameters extends PureComponent {
             if (option.movementMode === 'greyscale-dot') {
                 option.dwellTime = 5;
                 option.fillInterval = 0.14;
-                option.jogSpeed = 2500;
-                option.workSpeed = 2500;
+                option.jogSpeed = 3000;
+                // option.workSpeed = 2500;
                 option.fixedPower = 60;
             }
             if (option.movementMode === 'greyscale-line') {
@@ -101,7 +102,6 @@ class LaserParameters extends PureComponent {
 
         const { useLegacyEngine, name } = toolPath;
 
-
         return (
             <React.Fragment>
                 <div className="border-default-grey-1 border-radius-8 padding-vertical-8 padding-horizontal-16">
@@ -136,11 +136,11 @@ class LaserParameters extends PureComponent {
                         activeToolDefinition={this.props.activeToolDefinition}
                         updateGcodeConfig={this.actions.updateGcodeConfig}
                         updateToolConfig={this.actions.updateToolConfig}
-
                         toolDefinitions={this.props.toolDefinitions}
                         isModifiedDefinition={this.props.isModifiedDefinition}
                         setCurrentToolDefinition={this.props.setCurrentToolDefinition}
                         setCurrentValueAsProfile={this.props.setCurrentValueAsProfile}
+                        isModel={this.props.isModel}
                     />
                 </div>
             </React.Fragment>

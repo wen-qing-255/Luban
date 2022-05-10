@@ -56,9 +56,13 @@ class Controls extends EventEmitter {
 
     lastQuaternion = new THREE.Quaternion();
 
+    minDistance = 10;
+
     // calculation temporary variables
     // spherical rotation
     enableRotate = true;
+
+    maxDistance = 3500;
 
     spherical = new THREE.Spherical();
 
@@ -78,7 +82,10 @@ class Controls extends EventEmitter {
     // scale
     scale = 1;
 
-    scaleRate = 0.98;
+    scaleRate = 0.90;
+
+    // pan zoom factor, when distance is 700, the init panScale is 1
+    panScale = 1;
 
     // calculation only
     offset = new THREE.Vector3();
@@ -106,7 +113,13 @@ class Controls extends EventEmitter {
 
     clickEnabled = true;
 
-    constructor(sourceType, displayedType, camera, group, domElement, onScale, onPan, supportActions, minScale = undefined, maxScale = undefined, scaleSize = undefined) {
+    isMouseDown = false;
+
+    isClickOnPeripheral = false;
+
+    constructor(
+        sourceType, displayedType, camera, group, domElement, onScale, onPan, supportActions, minScale = undefined, maxScale = undefined, scaleSize = undefined
+    ) {
         super();
 
         this.sourceType = sourceType;
@@ -124,6 +137,7 @@ class Controls extends EventEmitter {
         this.minScale = minScale;
         this.maxScale = maxScale;
         this.scaleSize = scaleSize;
+        this.isPrimeTower = false;
 
         this.bindEventListeners();
     }
@@ -138,7 +152,6 @@ class Controls extends EventEmitter {
         this.transformControl.addEventListener('update', () => {
             this.emit(EVENTS.UPDATE);
         });
-        this.transformControl.mode = 'translate';
         this.props?.displayedType !== 'gcode' && this.group.add(this.transformControl);
     }
 
@@ -146,7 +159,20 @@ class Controls extends EventEmitter {
         this.group.remove(this.transformControl);
     }
 
-    recoverTransformControls() {
+    getTransformControls() {
+        return this.transformControl;
+    }
+
+    recoverTransformControls(_isPrimeTower = false, mode) {
+        if (_isPrimeTower) {
+            this.transformControl = new TransformControls(this.camera, _isPrimeTower);
+        } else {
+            this.transformControl = new TransformControls(this.camera);
+        }
+        this.transformControl.addEventListener('update', () => {
+            this.emit(EVENTS.UPDATE);
+        });
+        mode && this.setTransformMode(mode);
         this.group.add(this.transformControl);
     }
 
@@ -166,6 +192,10 @@ class Controls extends EventEmitter {
         this.target = target;
 
         this.updateCamera();
+    }
+
+    setPrimeTower(value) {
+        this.isPrimeTower = value;
     }
 
     bindEventListeners() {
@@ -208,12 +238,16 @@ class Controls extends EventEmitter {
         const elem = this.domElement === document ? document.body : this.domElement;
 
         this.offset.copy(this.camera.position).sub(this.target);
-
         // calculate move distance of target in perspective view of camera
         const distance = 2 * this.offset.length() * Math.tan(this.camera.fov / 2 * Math.PI / 180);
-
-        this.panLeft(distance * deltaX / elem.clientHeight, this.camera.matrix);
-        this.panUp(distance * deltaY / elem.clientHeight, this.camera.matrix);
+        let currentScale = this.panScale;
+        if (this.panScale <= 3) {
+            currentScale = 1;
+        } else {
+            currentScale = (this.panScale * 0.5) * 0.75;
+        }
+        this.panLeft(distance * deltaX * currentScale / elem.clientWidth, this.camera.matrix);
+        this.panUp(distance * deltaY * currentScale / elem.clientHeight, this.camera.matrix);
     }
 
     setScale(scale) {
@@ -240,6 +274,7 @@ class Controls extends EventEmitter {
     }
 
     onMouseDown = (event) => {
+        this.isMouseDown = true;
         // Prevent the browser from scrolling.
         // event.preventDefault();
         this.mouseDownPosition = this.getMouseCoord(event);
@@ -258,6 +293,17 @@ class Controls extends EventEmitter {
 
         switch (event.button) {
             case THREE.MOUSE.LEFT: {
+                if (this.state === STATE.SUPPORT) {
+                    const coord = this.getMouseCoord(event);
+                    this.ray.setFromCamera(coord, this.camera);
+                    this.ray.firstHitOnly = true;
+                    const res = this.ray.intersectObject(this.selectedGroup, true);
+                    if (res.length) {
+                        this.state = STATE.SUPPORT;
+                        this.supportActions.applyBrush(res);
+                        break;
+                    }
+                }
                 // Transform on selected object
                 if (this.selectedGroup && this.selectedGroup.children.length > 0) {
                     const coord = this.getMouseCoord(event);
@@ -266,6 +312,7 @@ class Controls extends EventEmitter {
                     if (this.transformControl.onMouseDown(coord)) {
                         this.state = STATE.TRANSFORM;
                         this.emit(EVENTS.BEFORE_TRANSFORM_OBJECT);
+                        this.isClickOnPeripheral = true;
                         break;
                     }
                 }
@@ -307,9 +354,14 @@ class Controls extends EventEmitter {
         if (this.state === STATE.SUPPORT) {
             const coord = this.getMouseCoord(event);
             this.ray.setFromCamera(coord, this.camera);
-            const mousePosition = new THREE.Vector3();
-            this.ray.ray.intersectPlane(this.horizontalPlane, mousePosition);
-            this.supportActions.moveSupport(mousePosition);
+            this.ray.firstHitOnly = true;
+            const res = this.ray.intersectObject(this.selectedGroup, true);
+            if (res.length) {
+                // console.log(this.selectedGroup, res);
+                this.supportActions.moveSupport(res);
+            }
+            // const mousePosition = new THREE.Vector3();
+            // this.ray.ray.intersectPlane(this.horizontalPlane, mousePosition);
             this.emit(EVENTS.UPDATE);
         }
         if (this.state === STATE.ROTATE_PLACEMENT) {
@@ -340,9 +392,22 @@ class Controls extends EventEmitter {
                 break;
             case STATE.TRANSFORM:
                 if (this.canOperateModel) {
-                    this.transformControl.onMouseMove(this.getMouseCoord(event));
+                    this.transformControl.onMouseMove(this.getMouseCoord(event), this.isPrimeTower);
                 }
                 this.emit(EVENTS.TRANSFORM_OBJECT);
+                break;
+            case STATE.SUPPORT:
+                if (this.isMouseDown) {
+                    const coord = this.getMouseCoord(event);
+                    this.ray.setFromCamera(coord, this.camera);
+                    this.ray.firstHitOnly = true;
+                    const res = this.ray.intersectObject(this.selectedGroup, true);
+                    if (res.length) {
+                        this.supportActions.applyBrush(res);
+                    }
+                    this.emit(EVENTS.UPDATE);
+                    event.stopPropagation();
+                }
                 break;
             default:
                 break;
@@ -364,7 +429,7 @@ class Controls extends EventEmitter {
                         this.onClick(event, true);
                         // Right click to open context menu
                         // Note that the event is mouse up, not really contextmenu
-                        this.emit(EVENTS.CONTEXT_MENU, event);
+                        !this.isPrimeTower && this.emit(EVENTS.CONTEXT_MENU, event);
                     }
                 } else {
                     this.onPan();
@@ -379,15 +444,18 @@ class Controls extends EventEmitter {
             case STATE.ROTATE_PLACEMENT:
                 this.prevState = STATE.ROTATE_PLACEMENT;
                 break;
+            case STATE.SUPPORT:
+                this.prevState = STATE.SUPPORT;
+                break;
             default:
                 break;
         }
-
         this.state = this.prevState || STATE.NONE;
 
         document.removeEventListener('mousemove', this.onDocumentMouseMove, false);
         // mouse up needed no matter mousedowm on support mode
         document.removeEventListener('mouseup', this.onDocumentMouseUp, false);
+        this.isMouseDown = false;
     };
 
     disableClick() {
@@ -408,7 +476,6 @@ class Controls extends EventEmitter {
      */
     onClick = (event, isRightClick = false) => {
         if (this.state === STATE.SUPPORT) {
-            this.supportActions.saveSupport();
             return;
         }
         if (!this.clickEnabled) {
@@ -460,8 +527,7 @@ class Controls extends EventEmitter {
             if (isMultiSelect) {
                 if (isRightClick) {
                     if (intersect) {
-                        const objectIndex = this.selectedGroup.children.indexOf(intersect.object);
-                        if (objectIndex === -1) {
+                        if (!this.isObjectInSelectedGroup(intersect.object)) {
                             selectEvent = SELECTEVENT.UNSELECT_ADDSELECT;
                         }
                     } else {
@@ -469,8 +535,7 @@ class Controls extends EventEmitter {
                     }
                 } else {
                     if (intersect) {
-                        const objectIndex = this.selectedGroup.children.indexOf(intersect.object);
-                        if (objectIndex === -1) {
+                        if (!this.isObjectInSelectedGroup(intersect.object)) {
                             selectEvent = SELECTEVENT.ADDSELECT;
                         } else {
                             selectEvent = SELECTEVENT.REMOVESELECT;
@@ -480,8 +545,7 @@ class Controls extends EventEmitter {
             } else {
                 if (isRightClick) {
                     if (intersect) {
-                        const objectIndex = this.selectedGroup.children.indexOf(intersect.object);
-                        if (objectIndex === -1) {
+                        if (!this.isObjectInSelectedGroup(intersect.object)) {
                             selectEvent = SELECTEVENT.UNSELECT_ADDSELECT;
                         }
                     } else {
@@ -491,7 +555,11 @@ class Controls extends EventEmitter {
                     if (intersect) {
                         selectEvent = SELECTEVENT.UNSELECT_ADDSELECT;
                     } else {
-                        selectEvent = SELECTEVENT.UNSELECT;
+                        if (!this.isClickOnPeripheral) {
+                            selectEvent = SELECTEVENT.UNSELECT;
+                        } else {
+                            this.isClickOnPeripheral = false;
+                        }
                     }
                 }
             }
@@ -516,8 +584,18 @@ class Controls extends EventEmitter {
         }
     };
 
+    isObjectInSelectedGroup(object) {
+        let found = false;
+        this.selectedGroup.traverse((object3d) => {
+            if (object3d === object) {
+                found = true;
+            }
+        });
+        return found;
+    }
+
     onMouseWheel = (event) => {
-        if (this.state === STATE.NONE || this.state === STATE.ROTATE_PLACEMENT) {
+        if (this.state === STATE.NONE || this.state === STATE.ROTATE_PLACEMENT || this.state === STATE.SUPPORT) {
             event.preventDefault();
             event.stopPropagation();
 
@@ -567,10 +645,10 @@ class Controls extends EventEmitter {
             v.unproject(scope.camera);
 
             v.sub(scope.camera.position).normalize();
-
-            const distance = v1.copy(scope.target).sub(scope.camera.position).dot(new THREE.Vector3(1, 1, 1)) / v.dot(new THREE.Vector3(1, 1, 1));
-
-            scope.mouse3D.copy(scope.camera.position).add(v.multiplyScalar(distance));
+            // now v is Vector3 which is from mouse position camera position
+            const distanceAll = v1.copy(scope.target).sub(scope.camera.position).length();
+            this.panScale = Math.round((Math.log(distanceAll / 700) / Math.log(this.scaleRate)) * 10) / 10;
+            scope.mouse3D.copy(scope.camera.position).add(v.multiplyScalar(distanceAll));
         };
     })();
 
@@ -582,7 +660,7 @@ class Controls extends EventEmitter {
             this.dollyOut();
         }
 
-        this.updateCamera();
+        this.updateCamera(true);
     };
 
     setSelectableObjects(objects) {
@@ -616,7 +694,7 @@ class Controls extends EventEmitter {
         this.prevState = STATE.NONE;
     }
 
-    updateCamera() {
+    updateCamera(shouldUpdateTarget = false) {
         this.offset.copy(this.camera.position).sub(this.target);
 
         const spherialOffset = new THREE.Vector3();
@@ -643,11 +721,12 @@ class Controls extends EventEmitter {
             if (this.maxScale > 0 && this.spherical.radius < this.scaleSize / this.maxScale) {
                 this.spherical.radius = this.scaleSize / this.maxScale;
             }
-            if (this.minScale > 0 && this.spherical.radius > this.scaleSize / this.minScale) {
+            if (this.minScale > 0 && (this.spherical.radius > this.scaleSize / this.minScale)) {
                 this.spherical.radius = this.scaleSize / this.minScale;
             }
+            this.spherical.radius = Math.max(this.minDistance, Math.min(this.maxDistance, this.spherical.radius));
             // suport zoomToCursor (mouse only)
-            if (this.zoomToCursor) {
+            if (this.zoomToCursor && shouldUpdateTarget) {
                 this.target.lerp(this.mouse3D, 1 - this.spherical.radius / prevRadius);
             }
             spherialOffset.setFromSpherical(this.spherical);
@@ -666,6 +745,7 @@ class Controls extends EventEmitter {
             this.target.add(this.panOffset);
             this.panOffset.set(0, 0, 0);
         }
+
 
         // re-position camera
         this.camera.position.copy(this.target).add(this.offset);

@@ -1,9 +1,14 @@
 {
     "category": "Default Material",
+    "name": "Ball End Mill",
+    "i18nCategory": "key-default_category-Default Material",
+    "i18nName": "key-default_name-Ball End Mill",
     "inherits": "snapmaker2",
     "version": "1.0.0",
-    "name": "Ball End Mill",
     "overrides": {
+        "tool_type": {
+            "default_value": "ball"
+        },
         "diameter": {
             "default_value": 3.175
         },
@@ -27,6 +32,9 @@
         },
         "step_over": {
             "default_value": 1.2
+        },
+        "tool_extension_enabled": {
+            "default_value": false
         }
     }
 }

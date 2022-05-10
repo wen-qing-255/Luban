@@ -1,6 +1,6 @@
 import events from 'events';
 import fs from 'fs';
-import uuid from 'uuid';
+import { v4 as uuid } from 'uuid';
 import _ from 'lodash';
 import chalk from 'chalk';
 import parseJSON from 'parse-json';
@@ -54,7 +54,7 @@ const allMacros = [
     }
 ];
 const defaultMacros = allMacros.map((item) => {
-    item.id = uuid.v4();
+    item.id = uuid();
     item.mtime = new Date().getTime();
     item.repeat = 1;
     item.isDefault = true;
@@ -85,7 +85,7 @@ class ConfigStore extends events.EventEmitter {
 
         try {
             if (!fs.existsSync(this.file)) {
-                const content = JSON.stringify({});
+                const content = JSON.stringify({ macros: defaultMacros });
                 fs.writeFileSync(this.file, content, 'utf8');
             }
 

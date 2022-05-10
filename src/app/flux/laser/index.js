@@ -1,5 +1,5 @@
+/* eslint-disable import/no-cycle */
 import * as THREE from 'three';
-// import { DATA_PREFIX, EPSILON } from '../../constants';
 import { cloneDeep } from 'lodash';
 import {
     COORDINATE_MODE_BOTTOM_CENTER,
@@ -28,7 +28,7 @@ import definitionManager from '../manager/DefinitionManager';
 import i18n from '../../lib/i18n';
 import { timestamp } from '../../../shared/lib/random-utils';
 import ProgressStatesManager, { STEP_STAGE } from '../../lib/manager/ProgressManager';
-// import { valueOf } from '../../lib/contants-utils';
+import { logToolBarOperation } from '../../lib/gaEvent';
 
 const initModelGroup = new ModelGroup('laser');
 const operationHistory = new OperationHistory();
@@ -54,10 +54,15 @@ const INITIAL_STATE = {
 
     modelGroup: initModelGroup,
     SVGActions: new SVGActionsFactory(initModelGroup),
+    SVGCanvasMode: 'select',
+    SVGCanvasExt: {
+        extShape: '',
+        showExtShape: false,
+        elem: null
+    },
 
     displayedType: DISPLAYED_TYPE_MODEL,
     toolPathGroup: new ToolPathGroup(initModelGroup, 'laser'),
-    updatingToolPath: null,
     showToolPath: false,
     showSimulation: false,
 
@@ -109,7 +114,7 @@ const INITIAL_STATE = {
 
     // check to remove models
     removingModelsWarning: false,
-    removingModelsWarningCallback: () => {},
+    removingModelsWarningCallback: () => { },
     emptyToolPaths: [],
 
     // check not to duplicated create event
@@ -126,6 +131,7 @@ const INITIAL_STATE = {
         uploadName: '',
         originalName: '',
         modelInitSize: { x: 0, y: 0, z: 0 },
+        initScale: 1,
         svgInfo: [],
         stlInfo: {}
     },
@@ -215,6 +221,7 @@ export const actions = {
         const { group } = state.background;
         group.remove(...group.children);
         group.add(mesh);
+        logToolBarOperation(HEAD_LASER, 'camera_capture_add_backgroup');
         dispatch(actions.setBackgroundEnabled(true));
         dispatch(editorActions.updateState(HEAD_LASER, {
             useBackground: true
@@ -228,6 +235,7 @@ export const actions = {
 
         const { group } = state.background;
         group.remove(...group.children);
+        logToolBarOperation(HEAD_LASER, 'camera_capture_remove_backgroup');
         dispatch(actions.setBackgroundEnabled(false));
         dispatch(editorActions.updateState(HEAD_LASER, {
             useBackground: false
@@ -264,6 +272,7 @@ export const actions = {
             definitionsWithSameCategory = toolDefinitions.filter(d => d.category === oldName);
             for (const definition of definitionsWithSameCategory) {
                 definition.category = newName;
+                definition.i18nCategory = '';
                 await definitionManager.updateDefinition(definition);
                 // find the old tool category definition and replace it
                 const isReplacedDefinition = (d) => d.definitionId === definition.definitionId;
@@ -302,13 +311,14 @@ export const actions = {
         }
         const definitionsWithSameCategory = isCreate ? [{
             ...activeToolList,
-            name: 'Default Tool',
+            name: i18n._('key-default_category-Default Material'),
             settings: toolDefinitions[0]?.settings
         }]
             : state.toolDefinitions.filter(d => d.category === oldCategory);
         for (let i = 0; i < definitionsWithSameCategory.length; i++) {
             const newDefinition = definitionsWithSameCategory[i];
             newDefinition.category = newCategoryName;
+            newDefinition.i18nCategory = '';
             const definitionId = `${newDefinition.definitionId}${timestamp()}`;
             newDefinition.definitionId = definitionId;
             const createdDefinition = await definitionManager.createDefinition(newDefinition);
@@ -324,15 +334,17 @@ export const actions = {
 
     removeToolCategoryDefinition: (category) => async (dispatch, getState) => {
         const state = getState().laser;
-        const newToolDefinitions = state.toolDefinitions;
-        const definitionsWithSameCategory = newToolDefinitions.filter(d => d.category === category);
+        const toolDefinitions = state.toolDefinitions;
+        const definitionsWithSameCategory = toolDefinitions.filter(d => d.category === category);
         for (let i = 0; i < definitionsWithSameCategory.length; i++) {
             await definitionManager.removeDefinition(definitionsWithSameCategory[i]);
         }
 
+        const newToolDefinitions = toolDefinitions.filter(d => d.category !== category);
         dispatch(editorActions.updateState('laser', {
-            toolDefinitions: newToolDefinitions.filter(d => d.category !== category)
+            toolDefinitions: [...newToolDefinitions]
         }));
+        return newToolDefinitions;
     },
     removeToolListDefinition: (activeToolList) => async (dispatch, getState) => {
         const state = getState().laser;
@@ -344,6 +356,7 @@ export const actions = {
         dispatch(editorActions.updateState('laser', {
             toolDefinitions: [...newToolDefinitions]
         }));
+        return newToolDefinitions;
     },
     getDefaultDefinition: (definitionId) => (dispatch, getState) => {
         const { defaultDefinitions } = getState().laser;
@@ -354,6 +367,7 @@ export const actions = {
         const { defaultDefinitions } = getState().laser;
         const defaultDefinition = defaultDefinitions.find(d => d.definitionId === definitionId);
         dispatch(actions.updateToolListDefinition(defaultDefinition));
+        return defaultDefinition;
     }
 };
 

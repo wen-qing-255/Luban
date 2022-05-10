@@ -1,6 +1,8 @@
 import { shallowEqual, useDispatch, useSelector } from 'react-redux';
 import PropTypes from 'prop-types';
 import React, { useState } from 'react';
+import i18next from 'i18next';
+import { includes } from 'lodash';
 import Menu from '../../components/Menu';
 import SvgIcon from '../../components/SvgIcon';
 import i18n from '../../../lib/i18n';
@@ -9,7 +11,7 @@ import { actions as editorActions } from '../../../flux/editor';
 import Dropdown from '../../components/Dropdown';
 import Cnc3DVisualizer from '../../views/Cnc3DVisualizer';
 import MainToolBar from '../../layouts/MainToolBar';
-import { HEAD_CNC, HEAD_LASER, MACHINE_SERIES, CONNECTION_TYPE_WIFI } from '../../../constants';
+import { HEAD_CNC, HEAD_LASER, MACHINE_SERIES, CONNECTION_TYPE_WIFI, longLangWithType } from '../../../constants';
 import { actions as laserActions } from '../../../flux/laser';
 import { renderModal } from '../../utils';
 import LaserSetBackground from '../../widgets/LaserSetBackground';
@@ -46,7 +48,7 @@ function useRenderMainToolBar({ headType, setShowHomePage, setShowJobType, setSh
     let menu;
     if (headType === HEAD_CNC) {
         menu = (
-            <Menu style={{ marginTop: '8px' }}>
+            <Menu>
                 <Menu.Item
                     onClick={handleShowStlModal}
                     disabled={showStlModal}
@@ -86,7 +88,7 @@ function useRenderMainToolBar({ headType, setShowHomePage, setShowJobType, setSh
         );
     } else if (headType === HEAD_LASER) {
         menu = (
-            <Menu style={{ marginTop: '8px' }}>
+            <Menu>
                 <Menu.Item
                     onClick={() => setShowCameraCapture(true)}
                     disabled={isOriginalSeries ? false : !(isConnected && connectionType === CONNECTION_TYPE_WIFI)}
@@ -127,7 +129,8 @@ function useRenderMainToolBar({ headType, setShowHomePage, setShowJobType, setSh
             title: i18n._('key-CncLaser/MainToolBar-Home'),
             type: 'button',
             name: 'MainToolbarHome',
-            action: () => {
+            action: async () => {
+                await dispatch(editorActions.onRouterWillLeave(headType));
                 setShowHomePage(true);
             }
         },
@@ -135,7 +138,8 @@ function useRenderMainToolBar({ headType, setShowHomePage, setShowJobType, setSh
             title: i18n._('key-CncLaser/MainToolBar-Workspace'),
             type: 'button',
             name: 'MainToolbarWorkspace',
-            action: () => {
+            action: async () => {
+                await dispatch(editorActions.onRouterWillLeave(headType));
                 setShowWorkspace(true);
             }
         },
@@ -218,7 +222,7 @@ function useRenderMainToolBar({ headType, setShowHomePage, setShowJobType, setSh
                                     name="MainToolbarStl3dView"
                                     type={['static']}
                                 >
-                                    <div className="font-size-base color-black-3 height-16 margin-top-4">
+                                    <div className={`${includes(longLangWithType[i18next.language], headType) ? 'font-size-small' : 'font-size-base'} "color-black-3 height-16"`}>
                                         {i18n._('key-CncLaser/MainToolBar-STL 3D View')}
                                         <SvgIcon
                                             type={['static']}
@@ -255,13 +259,12 @@ function useRenderMainToolBar({ headType, setShowHomePage, setShowJobType, setSh
                                     name="MainToolbarCameraCapture"
                                     type={['static']}
                                 >
-                                    <div className="font-size-base color-black-3 height-16 margin-top-4">
+                                    <div className={`${includes(longLangWithType[i18next.language], headType) ? 'font-size-small' : 'font-size-base margin-top-4'} color-black-3 height-16`}>
                                         {i18n._('key-CncLaser/MainToolBar-Camera Capture')}
                                         <SvgIcon
                                             type={['static']}
                                             name="DropdownOpen"
                                             size={20}
-                                            // className="margin-top-4"
                                         />
                                     </div>
                                 </SvgIcon>
@@ -324,16 +327,18 @@ function useRenderMainToolBar({ headType, setShowHomePage, setShowJobType, setSh
             return (
                 <MainToolBar
                     leftItems={leftItems}
+                    lang={i18next.language}
+                    headType={headType}
                 />
             );
         }
     };
 }
-
 useRenderMainToolBar.propTypes = {
     headType: PropTypes.string.isRequired,
     setShowHomePage: PropTypes.func,
     setShowJobType: PropTypes.func,
     setShowWorkspace: PropTypes.func
 };
+
 export default useRenderMainToolBar;

@@ -104,7 +104,9 @@ class ToolPath {
 
         isRotate: false,
 
-        diameter: 0
+        diameter: 0,
+
+        layer: 0
     };
 
     offsetG92 = (pos) => {
@@ -117,6 +119,7 @@ class ToolPath {
         };
     };
 
+    // TODO:
     offsetAddLine = (start, end) => {
         this.fn.addLine(this.modal, this.offsetG92(start), this.offsetG92(end));
     };
@@ -177,6 +180,12 @@ class ToolPath {
         ';diameter': (param) => {
             if (param !== undefined && param !== null) {
                 this.modal.diameter = param;
+            }
+        },
+
+        ';LAYER': (param) => {
+            if (param !== undefined && param !== null) {
+                this.modal.layer = param;
             }
         }
     };
@@ -716,6 +725,7 @@ class ToolPath {
         },
         'T': (tool) => {
             if (tool !== undefined) {
+                // this.modal.gcodeType = 'start';
                 this.setModal({ tool: tool });
             }
         }
@@ -824,7 +834,7 @@ class ToolPath {
     }
 
     translateType(e) {
-        const type = e === undefined || e < this.position.e ? TYPE_CODES.TRAVEL : this.position.type;
+        const type = (e === undefined || e < this.position.e || e <= 0) ? TYPE_CODES.TRAVEL : this.position.type;
         return type;
     }
 

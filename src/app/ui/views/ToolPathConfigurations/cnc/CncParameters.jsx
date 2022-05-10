@@ -4,7 +4,8 @@ import classNames from 'classnames';
 import { connect } from 'react-redux';
 import { cloneDeep } from 'lodash';
 import Select from '../../../components/Select';
-import { CNC_MESH_SLICE_MODE_LINKAGE, CNC_MESH_SLICE_MODE_ROTATION,
+import {
+    CNC_MESH_SLICE_MODE_LINKAGE, CNC_MESH_SLICE_MODE_ROTATION,
     TOOLPATH_TYPE_IMAGE, TOOLPATH_TYPE_SCULPT, TOOLPATH_TYPE_VECTOR,
     CNC_DEFAULT_GCODE_PARAMETERS_DEFINITION
 } from '../../../../constants';
@@ -31,7 +32,8 @@ class CncParameters extends PureComponent {
 
         // size: PropTypes.object.isRequired,
         multipleEngine: PropTypes.bool.isRequired,
-        materials: PropTypes.object.isRequired
+        materials: PropTypes.object.isRequired,
+        isModel: PropTypes.bool.isRequired
     };
 
     state = {
@@ -41,7 +43,7 @@ class CncParameters extends PureComponent {
     };
 
     render() {
-        const { toolPath, materials, multipleEngine } = this.props;
+        const { toolPath, materials, multipleEngine, isModel } = this.props;
 
         const { name, type, gcodeConfig, useLegacyEngine } = toolPath;
 
@@ -51,14 +53,14 @@ class CncParameters extends PureComponent {
 
         const sliceModeOptions = [{
             value: CNC_MESH_SLICE_MODE_ROTATION,
-            label: 'Rotation'
+            label: i18n._('key-Cnc/ToolpathParameters-Rotation')
         }, {
             value: CNC_MESH_SLICE_MODE_LINKAGE,
-            label: 'Linkage'
+            label: i18n._('key-Cnc/ToolpathParameters-Linkage')
         }
         ];
 
-        const methodType = type === TOOLPATH_TYPE_VECTOR ? 'Contour' : 'Carve';
+        const methodType = type === TOOLPATH_TYPE_VECTOR ? i18n._('key-Cnc/ToolpathParameters-Outline') : i18n._('key-Cnc/ToolpathParameters-Carve');
         const isSVG = type === TOOLPATH_TYPE_VECTOR;
         const isImage = type === TOOLPATH_TYPE_IMAGE;
         const isSculpt = type === TOOLPATH_TYPE_SCULPT;
@@ -80,10 +82,10 @@ class CncParameters extends PureComponent {
         };
         // Session First
         const toolDefinitionFirstKeys = [];
-        if (isSVG || isImage || isSculpt && !isRotate && methodType === 'Carve') {
+        if (isSVG || isImage || isSculpt && !isRotate && type !== TOOLPATH_TYPE_VECTOR) {
             toolDefinitionFirstKeys.push('targetDepth');
         }
-        if (methodType === 'Carve' || sliceMode === CNC_MESH_SLICE_MODE_ROTATION || sliceMode === CNC_MESH_SLICE_MODE_LINKAGE) {
+        if (type !== TOOLPATH_TYPE_VECTOR || sliceMode === CNC_MESH_SLICE_MODE_ROTATION || sliceMode === CNC_MESH_SLICE_MODE_LINKAGE) {
             toolDefinitionFirstKeys.push('allowance');
         }
         const toolDefinitionFirst = {};
@@ -94,9 +96,9 @@ class CncParameters extends PureComponent {
         });
 
         // Session Tool
-        const toolDefinitionToolKeys = [
+        const toolDefinitionToolKeys = (type === TOOLPATH_TYPE_VECTOR || isRotate) ? [
             'workSpeed', 'plungeSpeed', 'stepDown', 'stepOver'
-        ];
+        ] : ['workSpeed', 'plungeSpeed', 'stepDown', 'stepOver', 'toolExtensionEnabled'];
         const toolDefinitionTool = {};
         toolDefinitionToolKeys.forEach((key) => {
             if (allDefinition[key]) {
@@ -261,7 +263,7 @@ class CncParameters extends PureComponent {
                                 {isRotate && (
                                     <React.Fragment>
                                         <TipTrigger
-                                            title={i18n._('key-Cnc/ToolpathParameters-Slicing Mode')}
+                                            title={i18n._('key-Cnc/ToolpathParameters-Method')}
                                             content={(
                                                 <div>
                                                     <p>{i18n._('key-Cnc/ToolpathParameters-Set the processing method of the 3D model.')}</p>
@@ -325,6 +327,7 @@ class CncParameters extends PureComponent {
                             setCurrentToolDefinition={this.props.setCurrentToolDefinition}
                             isModifiedDefinition={this.props.isModifiedDefinition}
                             setCurrentValueAsProfile={this.props.setCurrentValueAsProfile}
+                            isModel={isModel}
                         />
                         <ToolParameters
                             settings={toolDefinitionTool}

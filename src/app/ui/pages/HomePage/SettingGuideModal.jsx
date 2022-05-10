@@ -56,6 +56,12 @@ const machineSeriesOptions = [
         label: MACHINE_SERIES.A350.label,
         size: MACHINE_SERIES.A350.setting.size,
         img: '/resources/images/machine/size-2.0-A350.jpg'
+    },
+    {
+        value: MACHINE_SERIES.A400.value,
+        label: MACHINE_SERIES.A400.label,
+        size: MACHINE_SERIES.A400.setting.size,
+        img: '/resources/images/machine/size-2.0-A350.jpg'
     }
 ];
 const languageOptions = [
@@ -286,7 +292,7 @@ const SettingGuideModal = (props) => {
                                                 src={machineSeriesOptions[machineSeries].img}
                                                 alt={machineSeriesOptions[machineSeries].value}
                                             />
-                                            <div className="align-c heading-3 margin-bottom-8">{machineSeriesOptions[machineSeries].label}</div>
+                                            <div className="align-c heading-3 margin-bottom-8">{i18n._(machineSeriesOptions[machineSeries].label)}</div>
                                             <div className={styles.machineSize}>
                                                 <span className="main-text-normal margin-right-12">{i18n._('key-HomePage/Begin-Work Area')}:</span>
                                                 {
@@ -337,7 +343,6 @@ const SettingGuideModal = (props) => {
                                                     })}
                                                     onChange={e => handleToolheadChange(e, 'printing')}
                                                     size="large"
-                                                    disabled
                                                 />
                                             </div>
                                             <div className={classNames(styles.laserSelect, 'margin-bottom-16')}>

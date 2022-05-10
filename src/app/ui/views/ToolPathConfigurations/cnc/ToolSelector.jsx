@@ -9,7 +9,7 @@ import styles from '../styles.styl';
 import CncToolManager from '../../CncToolManager';
 import SvgIcon from '../../../components/SvgIcon';
 
-function ToolSelector({ toolDefinitions, setCurrentToolDefinition, setCurrentValueAsProfile, toolDefinition, isModifiedDefinition, shouldSaveToolpath = false, saveToolPath }) {
+function ToolSelector({ toolDefinitions, setCurrentToolDefinition, setCurrentValueAsProfile, toolDefinition, isModifiedDefinition = false, shouldSaveToolpath = false, saveToolPath, isModel }) {
     const [showManager, setShowManager] = useState(false);
     // const dispatch = useDispatch();
 
@@ -54,7 +54,6 @@ function ToolSelector({ toolDefinitions, setCurrentToolDefinition, setCurrentVal
     toolDefinitions.forEach(tool => {
         const category = tool.category;
         const definitionId = tool.definitionId;
-
         if (Object.keys(tool?.settings).length > 0) {
             const checkboxAndSelectGroup = {};
             const name = tool.name;
@@ -95,7 +94,7 @@ function ToolSelector({ toolDefinitions, setCurrentToolDefinition, setCurrentVal
         toolDefinitionOptions.push({
             name: 'modified',
             definitionId: 'new',
-            label: 'Create profile with current parameters',
+            label: i18n._('key-Laser/ToolpathParameters-Create profile with current parameters'),
             value: 'new-modified'
         });
     }
@@ -104,10 +103,10 @@ function ToolSelector({ toolDefinitions, setCurrentToolDefinition, setCurrentVal
     return (
         <div>
             <React.Fragment>
-                <div className="position-re sm-flex justify-space-between margin-vertical-8">
-                    <span className="sm-flex-auto sm-flex-order-negative height-32">
+                <div className={`margin-vertical-8 ${isModel ? 'position-re sm-flex justify-space-between' : null}`}>
+                    <div className="sm-flex-auto sm-flex-order-negative height-32">
                         {i18n._('key-Cnc/ToolpathParameters/ToolSelector-Tool')}
-                    </span>
+                    </div>
                     <div className="sm-flex position-re padding-bottom-24">
                         {(isModifiedDefinition
                             && (
@@ -123,7 +122,7 @@ function ToolSelector({ toolDefinitions, setCurrentToolDefinition, setCurrentVal
                             className="sm-flex align-r"
                             clearable={false}
                             isGroup
-                            size="super-large"
+                            size={isModel ? 'super-large' : 'higher-larger'}
                             valueObj={valueObj}
                             options={toolDefinitionOptions}
                             placeholder={i18n._('key-Cnc/ToolpathParameters/ToolSelector-Choose profile')}
@@ -156,7 +155,8 @@ ToolSelector.propTypes = {
     isModifiedDefinition: PropTypes.bool.isRequired,
     shouldSaveToolpath: PropTypes.bool,
     saveToolPath: PropTypes.func,
-    setCurrentValueAsProfile: PropTypes.func.isRequired
+    setCurrentValueAsProfile: PropTypes.func.isRequired,
+    isModel: PropTypes.bool
 };
 
 export default ToolSelector;

@@ -109,3 +109,114 @@
         overflow-y: auto;
     }
 }
+
+.dashed-line {
+    display: inline-block;
+    width: 100%;
+    height: 1px;
+    // https://kovart.github.io/dashed-border-generator/
+    background-image: url("data:image/svg+xml,%3csvg width='100%25' height='100%25' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100%25' height='100%25' fill='none' stroke='%23D5D6D9' stroke-width='4' stroke-dasharray='1%2c12' stroke-dashoffset='0' stroke-linecap='square'/%3e%3c/svg%3e");
+}
+
+.support-overlay {
+    .dashed-line {
+        display: inline-block;
+        width: 100%;
+        height: 1px;
+        // https://kovart.github.io/dashed-border-generator/
+        background-image: url("data:image/svg+xml,%3csvg width='100%25' height='100%25' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100%25' height='100%25' fill='none' stroke='%23D5D6D9' stroke-width='4' stroke-dasharray='1%2c12' stroke-dashoffset='0' stroke-linecap='square'/%3e%3c/svg%3e");
+    }
+}
+.extruder-overlay .dashed-line{
+    width: calc(100% - 5px)
+}
+
+.edit-support {
+    width: 280px;
+    background: $white;
+    box-shadow: rgb(134 134 139) 0px 0px 20px -10px;
+    border-radius: 8px;
+    position: absolute;
+    left: 72px;
+    overflow: hidden;
+    color: $black-3;
+    & header {
+        padding: 10px 16px;
+        border-bottom: 1px solid $grey-1;
+        font-weight: bold;
+        font-size: 16px;
+        color: #545659;
+        margin: 0;
+    }
+    & section {
+        margin: 15px 16px 24px;
+    }
+    & footer {
+        background-color: rgb(245, 245, 247);
+        padding: 8px 16px;
+        text-align: right;
+    }
+    & .overflow-visible {
+        overflow: visible;
+    }
+    & .support-btn-switchs {
+        & .support-btn-switch {
+            width: 50%;
+            vertical-align: middle;
+            background-color: white;
+            padding: 2px 4px;
+            border: 1px solid #B9BCBF;
+            &:first-child {
+                border-radius: 8px 0px 0px 8px;
+                border-right: 0;
+            }
+            &:last-child {
+                border-radius: 0px 8px 8px 0px;
+            }
+            &:hover
+            &.active {
+                color: #2A2C2E;
+                background #eeeff0 !important;
+            }
+            & .action-title{
+                vertical-align: middle;
+                display: inline-block;
+                line-height: 16px;
+                padding: 0 5px;
+            }
+        }
+    }
+}
+
+.extruder-item-disabled {
+    background: #f5f5f5;
+    cursor: not-allowed;
+    color: rgba(0, 0, 0, 0.25)
+}
+
+
+.overlay-title-font
+.overlay-sub-title-font {
+    font-size: $font-size-middle
+    color: #545659
+    line-height: 24px
+}
+
+.overlay-title-font 
+    font-weight: 700
+
+.overlay-sub-title-font 
+    font-weight: 500
+
+
+.rotate-svg 
+    height: 30px
+    width: 30px
+    text-align: center;
+    line-height: 30px;
+    &:hover
+        background-color: #D5D6D9
+        border-radius: 3.75px;
+
+.rotate-svg[disabled]:hover
+    background-color: transparent

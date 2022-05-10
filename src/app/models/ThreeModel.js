@@ -1,40 +1,108 @@
-import uuid from 'uuid';
+import { v4 as uuid } from 'uuid';
 import * as THREE from 'three';
-
+import { MeshLambertMaterial, ObjectLoader } from 'three';
+import {
+    LOAD_MODEL_FROM_INNER
+} from '../constants';
 
 import ThreeUtils from '../three-extensions/ThreeUtils';
+import ThreeGroup from './ThreeGroup';
+import BaseModel from './ThreeBaseModel';
+import { machineStore } from '../store/local-storage';
 
-import BaseModel from './BaseModel';
-
-const materialOverstepped = new THREE.MeshPhongMaterial({
-    color: 0xff0000,
-    shininess: 30,
-    transparent: true,
-    opacity: 0.6
-});
-const materialSelected = new THREE.MeshPhongMaterial({
-    color: 0xffffff,
-    side: THREE.DoubleSide,
-    shininess: 10
-});
-
-const materialNormal = new THREE.MeshPhongMaterial({
-    color: 0xcecece,
-    side: THREE.DoubleSide
-});
-
+const materialOverstepped = new THREE.Color(0xa80006);
 class ThreeModel extends BaseModel {
+    loadFrom = LOAD_MODEL_FROM_INNER;
+
+    parent = null;
+
     isThreeModel = true;
+
+    extruderConfig = {
+        infill: '0',
+        shell: '0',
+        // adhesion: '0',
+        // support: '0'
+    };
+
+    isSelected = false;
+
+    isEditingSupport = false;
+
+    target = null;
+
+    supportTag = false;
+
+    tmpSupportMesh = null; // store support mesh when editing support, and restore it after editing support finished
+
+    tmpMaterial = null; // store previous material for support editing
+
+    modelModeMaterial = null;
+
+    gcodeModeMaterial = null;
+
+    // displayedType = 'model';
+
+    supportFaceMarks = [];
+
+    originalGeometry = null;
 
     constructor(modelInfo, modelGroup) {
         super(modelInfo, modelGroup);
         const { width, height, processImageName } = modelInfo;
 
-
         this.geometry = modelInfo.geometry || new THREE.PlaneGeometry(width, height);
-        const material = modelInfo.material || new THREE.MeshBasicMaterial({ color: 0xe0e0e0, visible: false });
+        let material = modelInfo.material || new THREE.MeshStandardMaterial({ color: 0xe0e0e0, visible: false });
+
+        try {
+            const objectLoader = new ObjectLoader();
+            const json = JSON.parse(machineStore.get('scene'));
+            const images = objectLoader.parseImages(json.images);
+            const textures = objectLoader.parseTextures(json.textures, images);
+            const materials = objectLoader.parseMaterials(json.materials, textures);
+            const newMaterial = Object.values(materials)[0];
+            material = newMaterial;
+
+            this.modelModeMaterial = material;
+            // Line version
+            this.gcodeModeMaterial = new MeshLambertMaterial({
+                color: '#2a2c2e',
+                side: THREE.FrontSide,
+                depthWrite: false,
+                transparent: true,
+                opacity: 0.3,
+                polygonOffset: true,
+                polygonOffsetFactor: -5,
+                polygonOffsetUnits: -0.1
+            });
+            // Linetube version, not remove
+            // this.gcodeModeMaterial = new MeshLambertMaterial({
+            //     color: '#2a2c2e',
+            //     side: DoubleSide,
+            //     depthWrite: false,
+            //     transparent: true,
+            //     opacity: 0.3,
+            //     polygonOffset: true,
+            //     polygonOffsetFactor: -1,
+            //     polygonOffsetUnits: -5
+            // });
+        } catch (e) {
+            console.error('error', e);
+        }
+        if (modelInfo.geometry) {
+            const clonedGeometry = modelInfo.geometry.clone();
+            // share positions, normals, uvs, not geometry, so we can define colors for each geometry
+            const position = modelInfo.geometry.getAttribute('position');
+            const normal = modelInfo.geometry.getAttribute('normal');
+            position && clonedGeometry.setAttribute('position', position);
+            normal && clonedGeometry.setAttribute('normal', normal);
+            this.geometry = clonedGeometry;
+        } else {
+            this.geometry = new THREE.PlaneGeometry(width, height);
+        }
 
         this.meshObject = new THREE.Mesh(this.geometry, material);
+        this.meshObject.name = modelInfo?.uploadName;
 
         this.processImageName = processImageName;
 
@@ -62,6 +130,10 @@ class ThreeModel extends BaseModel {
 
         this.lastToolPathStr = null;
         this.isToolPath = false;
+        this.extruderConfig = {
+            ...this.extruderConfig,
+            ...modelInfo.extruderConfig
+        };
 
         if (modelInfo.convexGeometry) {
             this.setConvexGeometry(modelInfo.convexGeometry);
@@ -69,14 +141,18 @@ class ThreeModel extends BaseModel {
 
         this.updateTransformation(this.transformation);
         this.meshObject.addEventListener('update', this.modelGroup.onModelUpdate);
-        if (this.sourceType === '3d' && this.transformation.positionX === 0 && this.transformation.positionY === 0) {
-            this.stickToPlate();
-            const point = modelGroup._computeAvailableXY(this);
-            this.meshObject.position.x = point.x;
-            this.meshObject.position.y = point.y;
-            this.transformation.positionX = point.x;
-            this.transformation.positionY = point.y;
+        if (modelInfo.loadFrom === LOAD_MODEL_FROM_INNER) {
+            if (this.sourceType === '3d' && this.transformation.positionX === 0 && this.transformation.positionY === 0) {
+                this.stickToPlate();
+                const point = modelGroup._computeAvailableXY(this);
+                this.meshObject.position.x = point.x;
+                this.meshObject.position.y = point.y;
+                this.transformation.positionX = point.x;
+                this.transformation.positionY = point.y;
+            }
         }
+
+        this.updateMaterialColor(modelInfo.color ?? '#cecece');
     }
 
     get visible() {
@@ -87,21 +163,47 @@ class ThreeModel extends BaseModel {
         this.meshObject.visible = value;
     }
 
+    updateDisplayedType(value) {
+        this.displayedType = value;
+        this.setSelected(false);
+    }
+
     updateModelName(newName) {
         this.modelName = newName;
     }
 
+    updateMaterialColor(color) {
+        this._materialNormal = new THREE.Color(color);
+        this._materialSelected = new THREE.Color(color);
+        this.setSelected();
+    }
+
     onTransform() {
-        const geometrySize = ThreeUtils.getGeometrySize(this.meshObject.geometry, true);
+        // const geometrySize = ThreeUtils.getGeometrySize(this.meshObject.geometry, true);
         const { uniformScalingState } = this.meshObject;
 
-        const position = new THREE.Vector3();
-        this.meshObject.getWorldPosition(position);
-        const scale = new THREE.Vector3();
-        this.meshObject.getWorldScale(scale);
-        const quaternion = new THREE.Quaternion();
-        this.meshObject.getWorldQuaternion(quaternion);
-        const rotation = new THREE.Euler().setFromQuaternion(quaternion, undefined, false);
+        let position, scale, rotation;
+        if (this.parent) {
+            if (this.modelGroup.isModelSelected(this)) {
+                const { recovery } = this.modelGroup.unselectAllModels();
+                position = this.meshObject.position.clone();
+                scale = this.meshObject.scale.clone();
+                rotation = this.meshObject.rotation.clone();
+                recovery();
+            } else {
+                position = this.meshObject.position.clone();
+                scale = this.meshObject.scale.clone();
+                rotation = this.meshObject.rotation.clone();
+            }
+        } else {
+            position = new THREE.Vector3();
+            this.meshObject.getWorldPosition(position);
+            scale = new THREE.Vector3();
+            this.meshObject.getWorldScale(scale);
+            const quaternion = new THREE.Quaternion();
+            this.meshObject.getWorldQuaternion(quaternion);
+            rotation = new THREE.Euler().setFromQuaternion(quaternion, undefined, false);
+        }
 
         const transformation = {
             positionX: position.x,
@@ -113,8 +215,8 @@ class ThreeModel extends BaseModel {
             scaleX: scale.x,
             scaleY: scale.y,
             scaleZ: scale.z,
-            width: geometrySize.x * scale.x,
-            height: geometrySize.y * scale.y,
+            // width: geometrySize.x * scale.x,
+            // height: geometrySize.y * scale.y,
             uniformScalingState
         };
 
@@ -122,104 +224,11 @@ class ThreeModel extends BaseModel {
             ...this.transformation,
             ...transformation
         };
-
         return this.transformation;
     }
 
     updateTransformation(transformation) {
         super.updateTransformation(transformation);
-        // const { positionX, positionY, positionZ, rotationX, rotationY, rotationZ, scaleX, scaleY, scaleZ, flip, uniformScalingState } = transformation;
-        // const { width, height } = transformation;
-
-        // if (uniformScalingState !== undefined) {
-        //     this.meshObject.uniformScalingState = uniformScalingState;
-        //     this.transformation.uniformScalingState = uniformScalingState;
-        // }
-
-        // if (positionX !== undefined) {
-        //     this.meshObject.position.x = positionX;
-        //     this.transformation.positionX = positionX;
-        // }
-        // if (positionY !== undefined) {
-        //     this.meshObject.position.y = positionY;
-        //     this.transformation.positionY = positionY;
-        // }
-        // if (positionZ !== undefined) {
-        //     this.meshObject.position.z = positionZ;
-        //     this.transformation.positionZ = positionZ;
-        // }
-        // if (rotationX !== undefined) {
-        //     this.meshObject.rotation.x = rotationX;
-        //     this.transformation.rotationX = rotationX;
-        // }
-        // if (rotationY !== undefined) {
-        //     this.meshObject.rotation.y = rotationY;
-        //     this.transformation.rotationY = rotationY;
-        // }
-        // if (rotationZ !== undefined) {
-        //     this.meshObject.rotation.z = rotationZ;
-        //     this.transformation.rotationZ = rotationZ;
-        // }
-        // if (scaleX !== undefined) {
-        //     this.meshObject.scale.x = scaleX;
-        //     this.transformation.scaleX = scaleX;
-        // }
-        // if (scaleY !== undefined) {
-        //     this.meshObject.scale.y = scaleY;
-        //     this.transformation.scaleY = scaleY;
-        // }
-        // if (scaleZ !== undefined) {
-        //     this.meshObject.scale.z = scaleZ;
-        //     this.transformation.scaleZ = scaleZ;
-        // }
-        // if (flip !== undefined) {
-        //     this.transformation.flip = flip;
-        //     if (this.modelObject3D) {
-        //         if (flip === 0) {
-        //             this.modelObject3D.rotation.x = 0;
-        //             this.modelObject3D.rotation.y = 0;
-        //         }
-        //         if (flip === 1) {
-        //             this.modelObject3D.rotation.x = Math.PI;
-        //             this.modelObject3D.rotation.y = 0;
-        //         }
-        //         if (flip === 2) {
-        //             this.modelObject3D.rotation.x = 0;
-        //             this.modelObject3D.rotation.y = Math.PI;
-        //         }
-        //         if (flip === 3) {
-        //             this.modelObject3D.rotation.x = Math.PI;
-        //             this.modelObject3D.rotation.y = Math.PI;
-        //         }
-        //     }
-        //     if (this.processObject3D) {
-        //         if (flip === 0) {
-        //             this.processObject3D.rotation.x = 0;
-        //             this.processObject3D.rotation.y = 0;
-        //         }
-        //         if (flip === 1) {
-        //             this.processObject3D.rotation.x = Math.PI;
-        //             this.processObject3D.rotation.y = 0;
-        //         }
-        //         if (flip === 2) {
-        //             this.processObject3D.rotation.x = 0;
-        //             this.processObject3D.rotation.y = Math.PI;
-        //         }
-        //         if (flip === 3) {
-        //             this.processObject3D.rotation.x = Math.PI;
-        //             this.processObject3D.rotation.y = Math.PI;
-        //         }
-        //     }
-        // }
-        // // width & height dont effected on meshobject any more
-        // if (width) {
-        //     this.transformation.width = width;
-        // }
-        // if (height) {
-        //     this.transformation.height = height;
-        // }
-        // this.transformation = { ...this.transformation };
-        // return this.transformation;
     }
 
     computeBoundingBox() {
@@ -236,15 +245,22 @@ class ThreeModel extends BaseModel {
         }
     }
 
+    isModelInGroup() {
+        return this.parent && this.parent instanceof ThreeGroup;
+    }
+
     stickToPlate() {
         if (this.sourceType !== '3d') {
             return;
         }
-
+        if (this.isModelInGroup()) {
+            this.parent.stickToPlate();
+            return;
+        }
         const revert = ThreeUtils.removeObjectParent(this.meshObject);
 
         this.computeBoundingBox();
-        this.meshObject.position.z = this.meshObject.position.z - this.boundingBox.min.z;
+        this.meshObject.position.z -= this.boundingBox.min.z;
         this.computeBoundingBox(); // update boundingbox after position changed
         this.onTransform();
         revert();
@@ -253,18 +269,11 @@ class ThreeModel extends BaseModel {
     // 3D
     setMatrix(matrix) {
         this.meshObject.updateMatrix();
-        this.meshObject.applyMatrix4(new THREE.Matrix4().getInverse(this.meshObject.matrix));
+        this.meshObject.applyMatrix4(new THREE.Matrix4().copy(this.meshObject.matrix).invert());
         this.meshObject.applyMatrix4(matrix);
         // attention: do not use Object3D.applyMatrix(matrix : Matrix4)
         // because applyMatrix is accumulated
         // anther way: decompose Matrix and reset position/rotation/scale
-        // let position = new THREE.Vector3();
-        // let quaternion = new THREE.Quaternion();
-        // let scale = new THREE.Vector3();
-        // matrix.decompose(position, quaternion, scale);
-        // this.position.copy(position);
-        // this.quaternion.copy(quaternion);
-        // this.scale.copy(scale);
     }
 
     setOversteppedAndSelected(overstepped, isSelected) {
@@ -276,16 +285,35 @@ class ThreeModel extends BaseModel {
         if (typeof isSelected === 'boolean') {
             this.isSelected = isSelected;
         }
-        if (this.overstepped === true) {
-            this.meshObject.material = materialOverstepped.clone();
-        } else if (this.isSelected === true) {
-            this.meshObject.material = materialSelected.clone();
+        if (this.displayedType !== 'model') {
+            this.meshObject.material = this.gcodeModeMaterial;
         } else {
-            this.meshObject.material = materialNormal.clone();
+            this.meshObject.material = this.modelModeMaterial;
+            if (this.isEditingSupport) {
+                // TODO: uniform material for setting triangle color and textures
+                this.meshObject.material.color.set(0xffffff);
+            } else if (this.overstepped === true) {
+                this.meshObject.material = this.tmpMaterial || this.meshObject.material;
+                this.meshObject.material.color.set(materialOverstepped);
+                this.tmpMaterial = null;
+            } else if (this.isSelected === true) {
+                this.meshObject.material = this.tmpMaterial || this.meshObject.material;
+                this.meshObject.material.color.set(this._materialSelected.clone());
+                this.tmpMaterial = null;
+            } else {
+                this.meshObject.material = this.tmpMaterial || this.meshObject.material;
+                this.meshObject.material.color.set(this._materialNormal.clone());
+                this.tmpMaterial = null;
+            }
         }
+
         // for indexed geometry
-        if (isSelected && this.meshObject.geometry.getAttribute('color')) {
+        if (this.type !== 'primeTower' && this.meshObject.geometry.getAttribute('color')) {
             this.meshObject.material.vertexColors = true;
+            this.meshObject.material.needsUpdate = true;
+        } else {
+            this.meshObject.material.vertexColors = false;
+            this.meshObject.material.needsUpdate = true;
         }
         // for support geometry
         if (this.supportTag) {
@@ -298,14 +326,15 @@ class ThreeModel extends BaseModel {
      *
      * @returns {ThreeModel}
      */
-    clone(modelGroup) {
+    clone(modelGroup = this.modelGroup) {
         const modelInfo = {
             ...this,
+            loadFrom: LOAD_MODEL_FROM_INNER,
             material: this.meshObject.material
         };
         const clone = new ThreeModel(modelInfo, modelGroup);
         clone.originModelID = this.modelID;
-        clone.modelID = uuid.v4();
+        clone.modelID = uuid();
         this.meshObject.updateMatrixWorld();
 
         clone.setMatrix(this.meshObject.matrixWorld);
@@ -336,7 +365,6 @@ class ThreeModel extends BaseModel {
         const z = (box3.max.z + box3.min.z) / 2;
         const center = new THREE.Vector3(x, y, z);
         center.applyMatrix4(this.meshObject.matrixWorld);
-
         // mirror operation on model may cause convex plane normal vector inverse, if it does, inverse it back
         const inverseNormal = (this.transformation.scaleX / Math.abs(this.transformation.scaleX) < 0);
         // TODO: how about do not use matrix to speed up
@@ -462,14 +490,14 @@ class ThreeModel extends BaseModel {
         return result;
     }
 
-    scaleToFit(size) {
+    scaleToFit(size, offsetX, offsetY) {
         const revertParent = ThreeUtils.removeObjectParent(this.meshObject);
         const modelSize = new THREE.Vector3();
         this.computeBoundingBox();
         this.boundingBox.getSize(modelSize);
         const scalar = ['x', 'y', 'z'].reduce((prev, key) => Math.min((size[key] - 5) / modelSize[key], prev), Number.POSITIVE_INFINITY);
         this.meshObject.scale.multiplyScalar(scalar);
-        this.meshObject.position.set(0, 0, 0);
+        this.meshObject.position.set(offsetX, offsetY, 0);
         this.meshObject.updateMatrix();
         this.setSelected();
         this.stickToPlate();
@@ -522,97 +550,72 @@ class ThreeModel extends BaseModel {
         revertParent();
     }
 
-    setSupportPosition(position) {
-        const object = this.meshObject;
-        object.position.copy(position);
-        object.updateMatrix();
-        this.generateSupportGeometry();
-    }
+    // setSupportPosition(position) {
+    //     const object = this.meshObject;
+    //     object.position.copy(position);
+    //     object.updateMatrix();
+    //     this.generateSupportGeometry();
+    // }
 
-    generateSupportGeometry() {
-        const target = this.target;
-        const center = new THREE.Vector3();
-        this.meshObject.getWorldPosition(center);
-        center.setZ(0);
+    // generateSupportGeometry() {
+    //     const target = this.target;
+    //     const center = new THREE.Vector3();
+    //     this.meshObject.getWorldPosition(center);
+    //     center.setZ(0);
 
-        const rayDirection = new THREE.Vector3(0, 0, 1);
-        const size = this.supportSize;
-        const raycaster = new THREE.Raycaster(center, rayDirection);
-        const intersects = raycaster.intersectObject(target.meshObject, true);
+    //     const rayDirection = new THREE.Vector3(0, 0, 1);
+    //     const size = this.supportSize;
+    //     const raycaster = new THREE.Raycaster(center, rayDirection);
+    //     const intersects = raycaster.intersectObject(target.meshObject, true);
 
-        let intersect = intersects[0];
-        if (intersects.length >= 2) {
-            intersect = intersects[intersects.length - 2];
-        }
-        this.isInitSupport = true;
-        let height = 100;
-        if (intersect && intersect.distance > 0) {
-            this.isInitSupport = false;
-            height = intersect.point.z;
-        }
+    //     let intersect = intersects[0];
+    //     if (intersects.length >= 2) {
+    //         intersect = intersects[intersects.length - 2];
+    //     }
+    //     this.isInitSupport = true;
+    //     let height = 100;
+    //     if (intersect && intersect.distance > 0) {
+    //         this.isInitSupport = false;
+    //         height = intersect.point.z;
+    //     }
 
-        const geometry = ThreeUtils.generateSupportBoxGeometry(size.x, size.y, height);
+    //     const geometry = ThreeUtils.generateSupportBoxGeometry(size.x, size.y, height);
 
-        geometry.computeVertexNormals();
+    //     geometry.computeVertexNormals();
 
-        this.meshObject.geometry = geometry;
-        this.geometry = geometry;
-        this.computeBoundingBox();
-    }
+    //     this.meshObject.geometry = geometry;
+    //     this.geometry = geometry;
+    //     this.computeBoundingBox();
+    // }
 
-    setVertexColors() {
-        this.meshObject.updateMatrixWorld();
-        const bufferGeometry = this.meshObject.geometry;
-        const clone = bufferGeometry.clone();
-        clone.applyMatrix4(this.meshObject.matrixWorld.clone());
+    // setVertexColors() {
+    //     this.meshObject.updateMatrixWorld();
+    //     const bufferGeometry = this.meshObject.geometry;
+    //     const clone = bufferGeometry.clone();
+    //     clone.applyMatrix4(this.meshObject.matrixWorld.clone());
 
-        const positions = clone.getAttribute('position').array;
+    //     const positions = clone.getAttribute('position').array;
+    //     const normals = clone.getAttribute('normal').array;
 
-        const colors = [];
-        const normals = clone.getAttribute('normal').array;
-        let start = 0;
-        const worker = () => {
-            let i = start;
-            do {
-                const normal = new THREE.Vector3(normals[i], normals[i + 1], normals[i + 2]);
-                const angle = normal.angleTo(new THREE.Vector3(0, 0, 1)) / Math.PI * 180;
-                const avgZ = (positions[i + 2] + positions[i + 5] + positions[i + 8]) / 3;
+    //     WorkerManager.evaluateSupportArea({ positions, normals }, (e) => {
+    //         const { colors } = e.data;
+    //         bufferGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    //         this.setSelected(true);
+    //         this.modelGroup.modelChanged();
+    //     });
+    // }
 
-                if (angle > 120 && avgZ > 1) {
-                    colors.push(1, 0.2, 0.2);
-                    colors.push(1, 0.2, 0.2);
-                    colors.push(1, 0.2, 0.2);
-                } else {
-                    colors.push(0.9, 0.9, 0.9);
-                    colors.push(0.9, 0.9, 0.9);
-                    colors.push(0.9, 0.9, 0.9);
-                }
-                i += 9;
-            } while (i - start < 10000 && i < normals.length);
-            if (i < normals.length) {
-                start = i;
-                setTimeout(worker, 1);
-            } else {
-                bufferGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-                this.setSelected(true);
-                this.modelGroup.modelChanged();
-            }
-        };
-
-        setTimeout(worker, 10);
-    }
-
-    removeVertexColors() {
-        const bufferGeometry = this.meshObject.geometry;
-        bufferGeometry.removeAttribute('color');
-        this.setSelected();
-        this.modelGroup && this.modelGroup.modelChanged();
-    }
+    // removeVertexColors() {
+    //     const bufferGeometry = this.meshObject.geometry;
+    //     bufferGeometry.deleteAttribute('color');
+    //     this.setSelected();
+    //     this.modelGroup && this.modelGroup.modelChanged();
+    // }
 
     getSerializableConfig() {
         const {
             modelID, limitSize, headType, sourceType, sourceHeight, sourceWidth, originalName, uploadName, config, mode,
-            transformation, processImageName, supportTag, visible
+            transformation, processImageName, supportTag, visible, extruderConfig, modelName
         } = this;
 
         return {
@@ -629,7 +632,9 @@ class ThreeModel extends BaseModel {
             visible,
             transformation,
             processImageName,
-            supportTag
+            supportTag,
+            extruderConfig,
+            modelName
         };
     }
 }

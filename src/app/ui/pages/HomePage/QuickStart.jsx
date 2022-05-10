@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import PropTypes from 'prop-types';
+import _ from 'lodash';
 import classNames from 'classnames';
 import i18n from '../../../lib/i18n';
 import { getCaseList } from '../../../lib/caseLibrary';
@@ -21,9 +22,9 @@ const QuickStart = (props) => {
     const dispatch = useDispatch();
 
     //  method
-    const loadCase = (caseItem) => {
+    const loadCase = _.debounce((caseItem) => {
         dispatch(projectActions.openProject(caseItem.pathConfig, history));
-    };
+    }, 500);
 
     //  useEffect
     useEffect(() => {
@@ -47,7 +48,8 @@ const QuickStart = (props) => {
                 classNames(
                     styles['case-list'],
                     { [styles.smallList]: !caseConfigFourAxis.length }
-                )}
+                )
+            }
             >
                 {caseConfig.map(caseItem => {
                     return (
@@ -63,11 +65,11 @@ const QuickStart = (props) => {
                                 </div>
                             </div>
                             <div className={classNames(styles.caseText)}>
-                                <div className={classNames(styles['case-title'], 'heading-3')}>
+                                <div className={classNames(styles['case-title'], 'heading-3', 'text-overflow-ellipsis-line-2')}>
                                     {i18n._(caseItem.title)}
                                 </div>
                                 <div className={classNames('disabled-text')}>
-                                    {i18n._(caseItem.tag_i18n)}
+                                    <span className="text-overflow-ellipsis display-inline width-percent-100">{i18n._(caseItem.tag_i18n)}</span>
                                 </div>
                             </div>
                         </div>
@@ -87,12 +89,13 @@ const QuickStart = (props) => {
                                 </div>
                             </div>
                             <div className={classNames(styles.caseText)}>
-                                <div className={classNames(styles['case-title'], 'heading-3')}>
+                                <div className={classNames(styles['case-title'], 'heading-3', 'text-overflow-ellipsis-line-2')}>
                                     {i18n._(caseFourAxisItem.title)}
                                 </div>
                                 <div className={classNames('disabled-text')}>
-                                    <span style={{ paddingRight: 2 }}>{i18n._('key-HomePage/Begin-4-axis')}</span>
-                                    <span>{i18n._(caseFourAxisItem.tag_i18n)}</span>
+                                    {/* <span style={{ paddingRight: 2 }}>{i18n._('key-HomePage/Begin-4-axis')}</span>
+                                    <span>{i18n._(caseFourAxisItem.tag_i18n)}</span> */}
+                                    <span className="text-overflow-ellipsis display-inline width-percent-100">{`${i18n._('key-HomePage/Begin-4-axis')} ${i18n._(caseFourAxisItem.tag_i18n)}`}</span>
                                 </div>
                             </div>
                         </div>

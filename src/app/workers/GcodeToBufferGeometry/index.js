@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import noop from 'lodash/noop';
 // import ObjToBufferGeometryPrint3d from './ObjToBufferGeometryPrint3d';
 import request from 'superagent';
+// import { GCodeRenderer, Color } from 'gcode-viewer';
 import GcodeToBufferGeometryPrint3d from './GcodeToBufferGeometryPrint3d';
 import {
     DATA_PREFIX
@@ -72,10 +73,11 @@ export const readFile = (path) => {
     });
 };
 
-const gcodeToBufferGeometryPrint3d = (gcodeObj, onProgress = noop) => {
+const gcodeToBufferGeometryPrint3d = (gcodeObj, extruderColors, onProgress = noop) => {
     return new Promise((resolve, reject) => {
         new GcodeToBufferGeometryPrint3d().parse(
             gcodeObj,
+            extruderColors,
             (bufferGeometry, layerCount, bounds) => {
                 resolve({
                     bufferGeometry,
@@ -93,7 +95,7 @@ const gcodeToBufferGeometryPrint3d = (gcodeObj, onProgress = noop) => {
     });
 };
 
-const gcodeToBufferGeometry = async (func, filename, onProgress = noop, onError = noop) => {
+const gcodeToBufferGeometry = async (func, filename, extruderColors, onProgress = noop, onError = noop) => {
     const gcodeFilepath = `${DATA_PREFIX}/${filename}`;
     let result = null;
     try {
@@ -102,6 +104,7 @@ const gcodeToBufferGeometry = async (func, filename, onProgress = noop, onError 
             case '3DP': {
                 const { bufferGeometry, layerCount, bounds } = await gcodeToBufferGeometryPrint3d(
                     gcode,
+                    extruderColors,
                     (progress) => {
                         onProgress(progress / 4 * 3 + 0.25);
                     }
@@ -109,7 +112,8 @@ const gcodeToBufferGeometry = async (func, filename, onProgress = noop, onError 
                 result = {
                     bufferGeometry,
                     layerCount,
-                    bounds
+                    bounds,
+                    gcode
                 };
                 break;
             }
