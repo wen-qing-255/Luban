@@ -11,8 +11,9 @@ import usePrevious from '../../../lib/hooks/previous';
 import { actions as machineActions } from '../../../flux/machine';
 import { controller } from '../../../lib/controller';
 import Terminal from './Terminal';
-import { ABSENT_OBJECT, CONNECTION_TYPE_SERIAL,
-    WORKFLOW_STATUS_RUNNING, WORKFLOW_STATUS_PAUSED, WORKFLOW_STATUS_PAUSING
+import { ABSENT_OBJECT, CONNECTION_TYPE_SERIAL, CONNECTION_TYPE_WIFI,
+    WORKFLOW_STATUS_RUNNING, WORKFLOW_STATUS_PAUSED, WORKFLOW_STATUS_PAUSING,
+    WORKFLOW_STATUS_STOPPING
 } from '../../../constants';
 
 let pubsubTokens = [];
@@ -282,7 +283,7 @@ function Console({ widgetId, widgetActions, minimized, isDefault, clearRenderSta
     }, [isConnected, port, server]);
 
     useEffect(() => {
-        const isWorking = workflowStatus === WORKFLOW_STATUS_RUNNING || workflowStatus === WORKFLOW_STATUS_PAUSED || workflowStatus === WORKFLOW_STATUS_PAUSING;
+        const isWorking = workflowStatus === WORKFLOW_STATUS_RUNNING || workflowStatus === WORKFLOW_STATUS_PAUSED || workflowStatus === WORKFLOW_STATUS_PAUSING || workflowStatus === WORKFLOW_STATUS_STOPPING;
 
         if (isWorking && shouldHideConsole) {
             widgetActions.setDisplay(false);

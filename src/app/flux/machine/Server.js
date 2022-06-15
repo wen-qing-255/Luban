@@ -11,7 +11,7 @@ import {
     CONNECTION_HEARTBEAT,
     CONNECTION_STATUS_CONNECTING,
     WORKFLOW_STATUS_RUNNING,
-    WORKFLOW_STATUS_IDLE,
+    // WORKFLOW_STATUS_IDLE,
     CONNECTION_OPEN,
     CONNECTION_CLOSE,
     CONNECTION_EXECUTE_GCODE,
@@ -181,7 +181,7 @@ export class Server extends events.EventEmitter {
                     return;
                 }
                 dispatch(baseActions.updateState({
-                    workflowStatus: WORKFLOW_STATUS_IDLE,
+                    // workflowStatus: WORKFLOW_STATUS_IDLE,
                     isSendedOnWifi: true
                 }));
             });
