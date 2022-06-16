@@ -346,6 +346,7 @@ export function simplifyModel(params, onProgress, onSucceed, onError) {
                 log.info(`response: ${res}`);
             }).end((_err, res) => {
                 if (_err) {
+                    console.log('fail to simplify model', _err);
                     log.error(`fail to simplify model: ${_err}`);
                 } else {
                     log.info(`lunar code: ${res.code}`);
