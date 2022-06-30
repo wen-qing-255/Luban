@@ -380,14 +380,16 @@ export const actions = {
         const { toolHead, series, size } = getState().machine;
         // await dispatch(machineActions.updateMachineToolHead(toolHead, series, CONFIG_HEADTYPE));
         const currentMachine = getMachineSeriesWithToolhead(series, toolHead);
-        await definitionManager.init(CONFIG_HEADTYPE, currentMachine.configPathname[CONFIG_HEADTYPE]);
+        const profileLevel = await definitionManager.init(CONFIG_HEADTYPE, currentMachine.configPathname[CONFIG_HEADTYPE]);
 
         dispatch(
             actions.updateState({
                 materialDefinitions: await definitionManager.getDefinitionsByPrefixName('material'),
                 qualityDefinitions: await definitionManager.getDefinitionsByPrefixName('quality'),
                 extruderLDefinition: await definitionManager.getDefinitionsByPrefixName('snapmaker_extruder_0'),
-                extruderRDefinition: await definitionManager.getDefinitionsByPrefixName('snapmaker_extruder_1')
+                extruderRDefinition: await definitionManager.getDefinitionsByPrefixName('snapmaker_extruder_1'),
+                printingProfileLevel: profileLevel.printingProfileLevel,
+                materialProfileLevel: profileLevel.materialProfileLevel
             })
         );
         // model group
@@ -416,7 +418,7 @@ export const actions = {
         series = getRealSeries(series);
         // await dispatch(machineActions.updateMachineToolHead(toolHead, series, CONFIG_HEADTYPE));
         const currentMachine = getMachineSeriesWithToolhead(series, toolHead);
-        await definitionManager.init(
+        const profileLevel = await definitionManager.init(
             CONFIG_HEADTYPE,
             currentMachine.configPathname[CONFIG_HEADTYPE]
         );
@@ -459,7 +461,9 @@ export const actions = {
                 ),
                 qualityDefinitions: await definitionManager.getDefinitionsByPrefixName(
                     'quality'
-                )
+                ),
+                printingProfileLevel: profileLevel.printingProfileLevel,
+                materialProfileLevel: profileLevel.materialProfileLevel
             })
         );
 

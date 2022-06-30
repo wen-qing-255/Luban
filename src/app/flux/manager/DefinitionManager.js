@@ -39,8 +39,8 @@ class DefinitionManager {
         this.headType = headType;
         let res;
         // active definition
-        res = await this.getDefinition('active', false);
-        this.activeDefinition = res;
+        const definitionRes = await this.getDefinition('active', false);
+        this.activeDefinition = definitionRes;
         res = await api.profileDefinitions.getDefaultDefinitions(
             this.headType,
             this.configPathname
@@ -61,6 +61,10 @@ class DefinitionManager {
 
         res = await this.getDefinition('snapmaker_extruder_1', false);
         this.extruderRDefinition = res;
+        return {
+            printingProfileLevel: definitionRes.printingProfileLevel,
+            materialProfileLevel: definitionRes.materialProfileLevel
+        };
     }
 
     /**

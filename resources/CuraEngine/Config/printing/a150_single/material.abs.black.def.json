@@ -1,56 +1,375 @@
 {
     "name": "ABS-Black",
     "version": "4.2.0",
-    "isRecommended": true,
     "inherits": "snapmaker",
     "category": "ABS",
+    "isRecommended": true,
+    "typeOfPrinting": "common",
     "i18nName": "key-default_name-ABS_Black",
     "i18nCategory": "key-default_category-ABS",
     "overrides": {
+        "material_type": {
+            "label": "Material Type",
+            "default_value": "PLA",
+            "affect": "",
+            "filter": [
+                "all"
+            ]
+        },
         "color": {
-            "default_value": "#464646"
-        },
-        "material_flow": {
-            "default_value": 100
-        },
-        "machine_heated_bed": {
-            "default_value": true
-        },
-        "material_print_temperature_layer_0": {
-            "default_value": 238
+            "label": "Color",
+            "default_value": "#ffffff",
+            "affect": "",
+            "filter": [
+                "basic",
+                "all"
+            ]
         },
         "material_print_temperature": {
-            "default_value": 235
+            "label": "Printing Temperature",
+            "default_value": 200,
+            "minimum_value": "0",
+            "maximum_value": "machine_maximum_print_temperature",
+            "affect": {
+                "material_initial_print_temperature": "material_print_temperature",
+                "material_final_print_temperature": "material_print_temperature"
+            },
+            "filter": [
+                "basic",
+                "all"
+            ],
+            "step": "0.1"
         },
-        "cool_fan_speed": {
-            "default_value": 0
+        "material_standby_temperature": {
+            "label": "Standby Temperature",
+            "default_value": 100,
+            "affect": "",
+            "minimum_value": "0",
+            "maximum_value": "material_print_temperature",
+            "filter": [
+                "basic",
+                "all"
+            ],
+            "step": "0.1"
         },
-        "material_bed_temperature_layer_0": {
-            "default_value": 80
+        "material_initial_print_temperature": {
+            "label": "Initial Printing Temperature",
+            "default_value": "material_print_temperature",
+            "affect": "",
+            "filter": [
+                "all"
+            ],
+            "step": "0.1"
+        },
+        "material_final_print_temperature": {
+            "label": "Final Printing Temperature",
+            "default_value": 200,
+            "affect": "",
+            "minimum_value": "0",
+            "maximum_value": "material_print_temperature",
+            "filter": [
+                "all"
+            ],
+            "step": "0.1"
         },
         "material_bed_temperature": {
-            "default_value": 80
+            "label": "Build Plate Temperature",
+            "minimum_value": "0",
+            "maximum_value": "heated_bed_maximum_temperature",
+            "default_value": 50,
+            "affect": "",
+            "filter": [
+                "basic",
+                "all"
+            ],
+            "step": "1"
         },
-        "material_diameter": {
-            "default_value": 1.75
+        "cool_fan_speed": {
+            "label": "Fan Speed",
+            "default_value": 100,
+            "affect": "",
+            "filter": [
+                "basic",
+                "all"
+            ],
+            "step": "1",
+            "children": {
+                "cool_fan_speed_min": {
+                    "label": "Regular Fan Speed",
+                    "default_value": "cool_fan_speed",
+                    "affect": "",
+                    "minimum_value": "0",
+                    "maximum_value": "100",
+                    "filter": [
+                        "all"
+                    ],
+                    "step": "1"
+                },
+                "cool_fan_speed_max": {
+                    "label": "Maximum Fan Speed",
+                    "default_value": "cool_fan_speed",
+                    "affect": "",
+                    "minimum_value": "0",
+                    "maximum_value": "100",
+                    "filter": [
+                        "all"
+                    ],
+                    "step": "1"
+                },
+                "cool_min_layer_time_fan_speed_max": {
+                    "label": "Regular/Maximum Fan Speed Threshold",
+                    "default_value": "cool_fan_speed",
+                    "affect": "",
+                    "minimum_value": "0",
+                    "maximum_value": "100",
+                    "filter": [
+                        "all"
+                    ],
+                    "step": "1"
+                }
+            }
+        },
+        "cool_fan_speed_0": {
+            "label": "Initial Fan Speed",
+            "default_value": 0,
+            "affect": "",
+            "minimum_value": "0",
+            "maximum_value": "100",
+            "filter": [
+                "all"
+            ],
+            "step": "1"
+        },
+        "cool_fan_full_layer": {
+            "label": "Regular Fan Speed at Layer",
+            "default_value": 3,
+            "affect": "",
+            "minimum_value": "0",
+            "maximum_value": "1000000000",
+            "filter": [
+                "all"
+            ],
+            "step": "1"
+        },
+        "cool_min_layer_time": {
+            "label": "Minimum Layer Time",
+            "default_value": 50,
+            "affect": "",
+            "minimum_value": "0",
+            "maximum_value": "1000000000",
+            "filter": [
+                "all"
+            ],
+            "step": "1"
+        },
+        "cool_min_speed": {
+            "label": "Minimum Speed",
+            "default_value": 10,
+            "affect": "",
+            "minimum_value": "0",
+            "maximum_value": "Math.sqrt(machine_max_feedrate_x ** 2 + machine_max_feedrate_y ** 2)",
+            "filter": [
+                "all"
+            ],
+            "step": "1"
+        },
+        "material_flow": {
+            "label": "Flow",
+            "default_value": 100,
+            "affect": {
+                "wall_0_material_flow": "material_flow",
+                "wall_x_material_flow": "material_flow",
+                "skin_material_flow": "material_flow",
+                "infill_material_flow": "material_flow",
+                "skirt_brim_material_flow": "material_flow",
+                "prime_tower_flow": "material_flow"
+            },
+            "minimum_value": "0",
+            "maximum_value": "200",
+            "filter": [
+                "all"
+            ],
+            "step": "1",
+            "children": {
+                "wall_0_material_flow": {
+                    "label": "Outer Wall Flow",
+                    "default_value": "material_flow",
+                    "minimum_value": "0",
+                    "maximum_value": "200",
+                    "affect": "",
+                    "filter": [
+                        "all"
+                    ],
+                    "step": "1"
+                },
+                "wall_x_material_flow": {
+                    "label": "Inner Wall(s) Flow",
+                    "default_value": "material_flow",
+                    "minimum_value": "0",
+                    "maximum_value": "200",
+                    "affect": "",
+                    "filter": [
+                        "all"
+                    ],
+                    "step": "1"
+                },
+                "skin_material_flow": {
+                    "label": "Top/Bottom Flow",
+                    "default_value": "material_flow",
+                    "minimum_value": "0",
+                    "maximum_value": "200",
+                    "affect": "",
+                    "filter": [
+                        "all"
+                    ],
+                    "step": "1"
+                },
+                "infill_material_flow": {
+                    "label": "Infill Flow",
+                    "default_value": "material_flow",
+                    "minimum_value": "0",
+                    "maximum_value": "200",
+                    "affect": "",
+                    "filter": [
+                        "all"
+                    ],
+                    "step": "1"
+                },
+                "skirt_brim_material_flow": {
+                    "label": "Skirt/Brim Flow",
+                    "default_value": "material_flow",
+                    "minimum_value": "0",
+                    "maximum_value": "200",
+                    "affect": "",
+                    "filter": [
+                        "all"
+                    ],
+                    "step": "1"
+                },
+                "prime_tower_flow": {
+                    "label": "Prime Tower Flow",
+                    "default_value": "material_flow",
+                    "minimum_value": "0",
+                    "maximum_value": "200",
+                    "affect": "",
+                    "filter": [
+                        "all"
+                    ],
+                    "step": "1"
+                }
+            }
         },
         "retraction_enable": {
-            "default_value": true
+            "label": "Enable Retraction",
+            "default_value": true,
+            "affect": "",
+            "filter": [
+                "basic",
+                "all"
+            ],
+            "step": "1",
+            "children": {
+                "retraction_amount": {
+                    "label": "Retraction Distance",
+                    "default_value": 6.5,
+                    "minimum_value": "0",
+                    "maximum_value": "200",
+                    "affect": "",
+                    "filter": [
+                        "basic",
+                        "all"
+                    ]
+                },
+                "retraction_speed": {
+                    "label": "Retraction Speed",
+                    "default_value": 60,
+                    "minimum_value": "0.1",
+                    "maximum_value": "machine_filament_max_feed_speed",
+                    "affect": {
+                        "retraction_retract_speed": "retraction_speed",
+                        "retraction_prime_speed": "retraction_speed"
+                    },
+                    "filter": [
+                        "basic",
+                        "all"
+                    ],
+                    "step": "0.1",
+                    "children": {
+                        "retraction_retract_speed": {
+                            "label": "Retraction Retract Speed",
+                            "default_value": 60,
+                            "minimum_value": "0.1",
+                            "maximum_value": "machine_filament_max_feed_speed",
+                            "affect": "",
+                            "filter": [
+                                "all"
+                            ],
+                            "step": "0.1"
+                        },
+                        "retraction_prime_speed": {
+                            "label": "Retraction Prime Speed",
+                            "default_value": 60,
+                            "minimum_value": "0.1",
+                            "maximum_value": "machine_filament_max_feed_speed",
+                            "affect": "",
+                            "filter": [
+                                "all"
+                            ],
+                            "step": "0.1"
+                        }
+                    }
+                },
+                "retraction_extra_prime_amount": {
+                    "label": "Retraction Extra Prime Amount",
+                    "default_value": 0,
+                    "minimum_value": "0",
+                    "maximum_value": "10",
+                    "affect": "",
+                    "filter": [
+                        ""
+                    ],
+                    "step": "0.1"
+                },
+                "retraction_min_travel": {
+                    "label": "Retraction Minimum Travel",
+                    "default_value": 50,
+                    "affect": "",
+                    "filter": [
+                        "invisible"
+                    ],
+                    "step": "0.1"
+                }
+            }
         },
-        "retraction_speed": {
-            "default_value": 60
+        "material_print_temperature_layer_0": {
+            "label": "Printing Temperature Initial Layer",
+            "default_value": "material_print_temperature",
+            "minimum_value": "0",
+            "maximum_value": "machine_maximum_print_temperature",
+            "affect": "",
+            "filter": [
+                "all"
+            ],
+            "step": "0.1"
         },
-        "retraction_amount": {
-            "default_value": 5
+        "material_bed_temperature_layer_0": {
+            "label": "Build Plate Temperature Initial Layer",
+            "default_value": "material_bed_temperature",
+            "minimum_value": "0",
+            "maximum_value": "heated_bed_maximum_temperature",
+            "affect": "",
+            "filter": [
+                "all"
+            ],
+            "step": "0.1"
         },
-        "retract_at_layer_change": {
-            "default_value": false
-        },
-        "retraction_hop": {
-            "default_value": 1
-        },
-        "retraction_hop_enabled": {
-            "default_value": false
+        "machine_heated_bed": {
+            "default_value": true,
+            "affect": "",
+            "filter": [
+                "invisible"
+            ],
+            "todo": 1
         }
     }
 }

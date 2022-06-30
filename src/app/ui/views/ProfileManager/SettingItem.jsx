@@ -15,7 +15,6 @@ function SettingItem({ definitionKey, settings, isDefaultDefinition = false, onC
     const [showColor, setShowColor] = useState(false);
 
     const setting = settings[definitionKey];
-
     const isProfile = isDefaultDefinition;
     if (!setting) {
         return null;
