@@ -4,6 +4,7 @@ import i18n from '../../../lib/i18n';
 import Select from '../../components/Select';
 import { NumberInput as Input } from '../../components/Input';
 import Checkbox from '../../components/Checkbox';
+import Anchor from '../../components/Anchor';
 import ColorSelector from '../../components/ColorSelector';
 import { HEAD_CNC, PRINTING_MATERIAL_CONFIG_COLORS } from '../../../constants';
 
@@ -11,7 +12,7 @@ import TipTrigger from '../../components/TipTrigger';
 import SvgIcon from '../../components/SvgIcon';
 import Popover from '../../components/Popover';
 
-function SettingItem({ definitionKey, settings, isDefaultDefinition = false, onChangeDefinition, defaultValue, styleSize = 'large', managerType, officalDefinition }) {
+function SettingItem({ definitionKey, settings, isDefaultDefinition = false, onChangeDefinition, defaultValue, styleSize = 'large', managerType, officalDefinition, onClick, categoryKey }) {
     const [showColor, setShowColor] = useState(false);
 
     const setting = settings[definitionKey];
@@ -139,114 +140,116 @@ function SettingItem({ definitionKey, settings, isDefaultDefinition = false, onC
     );
     return (
         <TipTrigger title={i18n._(label)} content={i18n._(description)} key={definitionKey}>
-            <div className="position-re sm-flex justify-space-between height-32 margin-vertical-8">
-                <span className="text-overflow-ellipsis width-auto main-text-normal" style={{ maxWidth: '171px' }}>
-                    {i18n._(label)}
-                </span>
-                <div className="sm-flex-auto">
-                    {isProfile && !isDefault && (
-                        <SvgIcon
-                            className="margin-horizontal-4"
-                            name="Reset"
-                            size={24}
-                            // className={}
-                            onClick={() => {
-                                onChangeDefinition(definitionKey, (defaultValue && defaultValue.value) ?? settingDefaultValue);
-                            }}
-                        />
-                    )}
-                    {type === 'float' && (
-                        <Input
-                            suffix={unit}
-                            className="sm-flex-width align-r"
-                            value={settingDefaultValue}
-                            min={min}
-                            max={max}
-                            size={styleSize}
-                            onChange={(value) => {
-                                onChangeDefinition(definitionKey, value);
-                            }}
-                        />
-                    )}
-                    {type === 'int' && (
-                        <Input
-                            suffix={unit}
-                            className="sm-flex-width align-r"
-                            value={settingDefaultValue}
-                            size={styleSize}
-                            // disabled={!isDefinitionEditable()}
-                            onChange={(value) => {
-                                onChangeDefinition(definitionKey, value);
-                            }}
-                        />
-                    )}
-                    {type === 'bool' && (
-                        <Checkbox
-                            className="sm-flex-width align-r"
-                            defaultChecked={settingDefaultValue}
-                            // disabled={!isDefinitionEditable()}
-                            type="checkbox"
-                            checked={settingDefaultValue}
-                            onChange={(event) => onChangeDefinition(definitionKey, event.target.checked)}
-                        />
-                    )}
-                    {type === 'enum' && (
-                        <Select
-                            className="sm-flex-width align-r"
-                            backspaceRemoves={false}
-                            clearable={false}
-                            size={styleSize}
-                            menuContainerStyle={{ zIndex: 5 }}
-                            name={definitionKey}
-                            // disabled={!isDefinitionEditable()}
-                            options={opts}
-                            value={settingDefaultValue}
-                            onChange={(option) => {
-                                onChangeDefinition(definitionKey, option.value);
-                            }}
-                            disabled={officalDefinition && managerType === HEAD_CNC && definitionKey === 'tool_type'}
-                        />
-                    )}
-                    {type === undefined && (
-                        <Input
-                            size={styleSize}
-                            className="sm-flex-width align-r"
-                            value={settingDefaultValue}
-                            // disabled={!isDefinitionEditable()}
-                            onChange={(value) => {
-                                onChangeDefinition(definitionKey, value);
-                            }}
-                        />
-                    )}
-                    {type === undefined && (
-                        <span className="sm-parameter-row__input-unit">{unit}</span>
-                    )}
-                    {type === 'color' && (
-                        <Popover
-                            content={colorSelectorContent}
-                            visible={showColor}
-                            trigger="click"
-                            placement="bottomRight"
-                            className="cancel-content-padding"
-                            onVisibleChange={(visible) => {
-                                setShowColor(visible);
-                            }}
-                        >
-                            <span
-                                className="sm-flex-width align-r height-percent-100 width-96 display-inline border-radius-8 border-default-black-5"
-                                style={{
-                                    background: settingDefaultValue,
-                                    height: 32
+            <Anchor onClick={() => onClick(categoryKey, definitionKey)}>
+                <div className="position-re sm-flex justify-space-between height-32 margin-vertical-8">
+                    <span className="text-overflow-ellipsis width-auto main-text-normal" style={{ maxWidth: '171px' }}>
+                        {i18n._(label)}
+                    </span>
+                    <div className="sm-flex-auto">
+                        {isProfile && !isDefault && (
+                            <SvgIcon
+                                className="margin-horizontal-4"
+                                name="Reset"
+                                size={24}
+                                // className={}
+                                onClick={() => {
+                                    onChangeDefinition(definitionKey, (defaultValue && defaultValue.value) ?? settingDefaultValue);
                                 }}
-                                role="button"
-                                tabIndex="-1"
-                                onKeyPress={() => {}}
-                                onClick={() => setShowColor(!showColor)}
                             />
-                        </Popover>
-                    )}
+                        )}
+                        {type === 'float' && (
+                            <Input
+                                suffix={unit}
+                                className="sm-flex-width align-r"
+                                value={settingDefaultValue}
+                                min={min}
+                                max={max}
+                                size={styleSize}
+                                onChange={(value) => {
+                                    onChangeDefinition(definitionKey, value);
+                                }}
+                            />
+                        )}
+                        {type === 'int' && (
+                            <Input
+                                suffix={unit}
+                                className="sm-flex-width align-r"
+                                value={settingDefaultValue}
+                                size={styleSize}
+                                // disabled={!isDefinitionEditable()}
+                                onChange={(value) => {
+                                    onChangeDefinition(definitionKey, value);
+                                }}
+                            />
+                        )}
+                        {type === 'bool' && (
+                            <Checkbox
+                                className="sm-flex-width align-r"
+                                defaultChecked={settingDefaultValue}
+                                // disabled={!isDefinitionEditable()}
+                                type="checkbox"
+                                checked={settingDefaultValue}
+                                onChange={(event) => onChangeDefinition(definitionKey, event.target.checked)}
+                            />
+                        )}
+                        {type === 'enum' && (
+                            <Select
+                                className="sm-flex-width align-r"
+                                backspaceRemoves={false}
+                                clearable={false}
+                                size={styleSize}
+                                menuContainerStyle={{ zIndex: 5 }}
+                                name={definitionKey}
+                                // disabled={!isDefinitionEditable()}
+                                options={opts}
+                                value={settingDefaultValue}
+                                onChange={(option) => {
+                                    onChangeDefinition(definitionKey, option.value);
+                                }}
+                                disabled={officalDefinition && managerType === HEAD_CNC && definitionKey === 'tool_type'}
+                            />
+                        )}
+                        {type === undefined && (
+                            <Input
+                                size={styleSize}
+                                className="sm-flex-width align-r"
+                                value={settingDefaultValue}
+                                // disabled={!isDefinitionEditable()}
+                                onChange={(value) => {
+                                    onChangeDefinition(definitionKey, value);
+                                }}
+                            />
+                        )}
+                        {type === undefined && (
+                            <span className="sm-parameter-row__input-unit">{unit}</span>
+                        )}
+                        {type === 'color' && (
+                            <Popover
+                                content={colorSelectorContent}
+                                visible={showColor}
+                                trigger="click"
+                                placement="bottomRight"
+                                className="cancel-content-padding"
+                                onVisibleChange={(visible) => {
+                                    setShowColor(visible);
+                                }}
+                            >
+                                <span
+                                    className="sm-flex-width align-r height-percent-100 width-96 display-inline border-radius-8 border-default-black-5"
+                                    style={{
+                                        background: settingDefaultValue,
+                                        height: 32
+                                    }}
+                                    role="button"
+                                    tabIndex="-1"
+                                    onKeyPress={() => {}}
+                                    onClick={() => setShowColor(!showColor)}
+                                />
+                            </Popover>
+                        )}
+                    </div>
                 </div>
-            </div>
+            </Anchor>
         </TipTrigger>
     );
 }
@@ -258,7 +261,9 @@ SettingItem.propTypes = {
     defaultValue: PropTypes.object,
     styleSize: PropTypes.string,
     managerType: PropTypes.string,
-    officalDefinition: PropTypes.bool
+    officalDefinition: PropTypes.bool,
+    onClick: PropTypes.func.isRequired,
+    categoryKey: PropTypes.string
 };
 
 export default React.memo(SettingItem);
