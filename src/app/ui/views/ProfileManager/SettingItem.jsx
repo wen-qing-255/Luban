@@ -5,6 +5,7 @@ import i18n from '../../../lib/i18n';
 import Select from '../../components/Select';
 import { NumberInput as Input } from '../../components/Input';
 import Checkbox from '../../components/Checkbox';
+import Anchor from '../../components/Anchor';
 import ColorSelector from '../../components/ColorSelector';
 import { HEAD_CNC, PRINTING_MATERIAL_CONFIG_COLORS } from '../../../constants';
 import Anchor from '../../components/Anchor';
@@ -62,7 +63,7 @@ const colorSelectorContent = (settingDefaultValue, definitionKey, setShowColor, 
         />
     </div>
 );
-function SettingItem({ definitionKey, settings, isDefaultDefinition = false, onChangeDefinition, defaultValue, styleSize = 'large', managerType, officalDefinition }) {
+function SettingItem({ definitionKey, settings, isDefaultDefinition = false, onChangeDefinition, defaultValue, styleSize = 'large', managerType, officalDefinition, onClick, categoryKey }) {
     const [showColor, setShowColor] = useState(false);
 
     const setting = settings[definitionKey];
@@ -309,7 +310,9 @@ SettingItem.propTypes = {
     defaultValue: PropTypes.object,
     styleSize: PropTypes.string,
     managerType: PropTypes.string,
-    officalDefinition: PropTypes.bool
+    officalDefinition: PropTypes.bool,
+    onClick: PropTypes.func.isRequired,
+    categoryKey: PropTypes.string
 };
 
 export default React.memo(SettingItem);

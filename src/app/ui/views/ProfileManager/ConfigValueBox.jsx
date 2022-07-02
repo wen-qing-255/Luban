@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { includes, throttle } from 'lodash';
 import classNames from 'classnames';
+import i18next from 'i18next';
+import { useSelector } from 'react-redux';
 import Menu from '../../components/Menu';
 import i18n from '../../../lib/i18n';
 import SettingItem from './SettingItem';
@@ -13,6 +15,7 @@ import Dropdown from '../../components/Dropdown';
 import { Button } from '../../components/Buttons';
 import { PRINTING_MANAGER_TYPE_MATERIAL } from '../../../constants';
 
+const fs = window.require('fs');
 function ConfigValueBox({
     optionConfigGroup,
     calculateTextIndex,
@@ -30,8 +33,23 @@ function ConfigValueBox({
     const [activeCateId, setActiveCateId] = useState(2);
     const [selectParamsType, setSelectParamsType] = useState('basic');
     const [customMode, setCustomMode] = useState(false);
+    const [showProfileDocs, setShowProfileDocs] = useState(true);
+    const [selectProfile, setSelectProfile] = useState('');
+    const [selectCategory, setSelectCategory] = useState('');
+    const [htmlContent, setHtmlContent] = useState('');
     const scrollDom = useRef(null);
     const fieldsDom = useRef([]);
+    const { profileDocsDir } = useSelector(state => state?.printing);
+    const lang = i18next.language;
+    useEffect(() => {
+        try {
+            const content = fs.readFileSync(`${profileDocsDir}/${lang.toUpperCase()}/${selectCategory}/${selectProfile}.html`, 'utf-8');
+            setHtmlContent(content);
+        } catch (e) {
+            console.info(e);
+            setHtmlContent('');
+        }
+    }, [selectProfile]);
     function setActiveCate(cateId) {
         if (scrollDom.current) {
             const container = scrollDom.current.parentElement;
@@ -50,6 +68,10 @@ function ConfigValueBox({
             setActiveCateId(cateId);
         }
     }
+    const handleUpdateProfileKey = (category, profileKey) => {
+        setSelectCategory(category);
+        setSelectProfile(profileKey);
+    };
     const renderCheckboxList = ({
         renderList,
         calculateTextIndex: _calculateTextIndex,
@@ -115,13 +137,14 @@ function ConfigValueBox({
         onChangeDefinition: _onChangeCustomConfig,
         managerType: _managerType,
         officalDefinition,
+        categoryKey
         // selectParamsType: _selectParamsType
     }) => {
-        return renderList && renderList.map(profileKey => {
+        return renderList && renderList.map((profileKey) => {
             if (selectParamsType === 'custom' || includes(settings[profileKey].filter, selectParamsType)) {
                 if (settings[profileKey].childKey.length > 0) {
                     return (
-                        <div className={`margin-left-${(settings[profileKey].zIndex - 1) * 16}`}>
+                        <div>
                             <SettingItem
                                 settings={settings}
                                 definitionKey={profileKey}
@@ -134,6 +157,8 @@ function ConfigValueBox({
                                 styleSize="large"
                                 managerType={_managerType}
                                 officalDefinition={officalDefinition}
+                                onClick={handleUpdateProfileKey}
+                                categoryKey={categoryKey}
                             />
                             {renderSettingItemList({
                                 settings,
@@ -147,19 +172,23 @@ function ConfigValueBox({
                     );
                 }
                 return (
-                    <SettingItem
-                        settings={settings}
-                        definitionKey={profileKey}
-                        key={profileKey}
-                        isDefaultDefinition={isDefaultDefinition}
-                        onChangeDefinition={_onChangeCustomConfig}
-                        defaultValue={{
-                            value: selectedSettingDefaultValue && selectedSettingDefaultValue[profileKey].default_value
-                        }}
-                        styleSize="large"
-                        managerType={_managerType}
-                        officalDefinition={officalDefinition}
-                    />
+                    <div className={`margin-left-${(settings[profileKey].zIndex - 1) * 16}`}>
+                        <SettingItem
+                            settings={settings}
+                            definitionKey={profileKey}
+                            key={profileKey}
+                            isDefaultDefinition={isDefaultDefinition}
+                            onChangeDefinition={_onChangeCustomConfig}
+                            defaultValue={{
+                                value: selectedSettingDefaultValue && selectedSettingDefaultValue[profileKey].default_value
+                            }}
+                            styleSize="large"
+                            managerType={_managerType}
+                            officalDefinition={officalDefinition}
+                            onClick={handleUpdateProfileKey}
+                            categoryKey={categoryKey}
+                        />
+                    </div>
                 );
             } else {
                 return null;
@@ -180,34 +209,38 @@ function ConfigValueBox({
         }
     }, [Object.keys(optionConfigGroup), selectParamsType, Object.keys(customConfigs)]);
 
+    const handleUpdateParamsType = (type) => {
+        setSelectProfile('');
+        setSelectParamsType(type);
+    };
     const materialParamsType = (
         <Menu>
-            <Menu.Item onClick={() => setSelectParamsType('basic')}>
+            <Menu.Item onClick={() => handleUpdateParamsType('basic')}>
                 <span>{i18n._('key-profileManager/params basic')}</span>
             </Menu.Item>
-            <Menu.Item onClick={() => setSelectParamsType('all')}>
+            <Menu.Item onClick={() => handleUpdateParamsType('all')}>
                 <span>{i18n._('key-profileManager/params all')}</span>
             </Menu.Item>
         </Menu>
     );
     const qualityParamsType = (
         <Menu>
-            <Menu.Item onClick={() => setSelectParamsType('recommed')}>
+            <Menu.Item onClick={() => handleUpdateParamsType('recommed')}>
                 <span>{i18n._('key-profileManager/params recommed')}</span>
             </Menu.Item>
-            <Menu.Item onClick={() => setSelectParamsType('custom')}>
+            <Menu.Item onClick={() => handleUpdateParamsType('custom')}>
                 <span>{i18n._('key-profileManager/params custom')}</span>
             </Menu.Item>
             <Menu.Item>
                 <div className="border-bottom-normal" />
             </Menu.Item>
-            <Menu.Item onClick={() => setSelectParamsType('basic')}>
+            <Menu.Item onClick={() => handleUpdateParamsType('basic')}>
                 <span>{i18n._('key-profileManager/params basic')}</span>
             </Menu.Item>
-            <Menu.Item onClick={() => setSelectParamsType('advanced')}>
+            <Menu.Item onClick={() => handleUpdateParamsType('advanced')}>
                 <span>{i18n._('key-profileManager/params advanced')}</span>
             </Menu.Item>
-            <Menu.Item onClick={() => setSelectParamsType('all')}>
+            <Menu.Item onClick={() => handleUpdateParamsType('all')}>
                 <span>{i18n._('key-profileManager/params all')}</span>
             </Menu.Item>
         </Menu>
@@ -289,7 +322,8 @@ function ConfigValueBox({
                         )}
                         <div className={classNames(
                             styles['manager-detail-and-docs'],
-                            'sm-flex'
+                            'sm-flex',
+                            'justify-space-between'
                         )}
                         >
                             <div
@@ -310,11 +344,11 @@ function ConfigValueBox({
                                 <div className="sm-parameter-container" ref={scrollDom}>
                                     {!isCategorySelected
                                         && Object.keys((selectParamsType === 'custom' && !customMode) ? customConfigs : optionConfigGroup).map((key, index) => {
-                                            const eachFieldsDom = fieldsDom.current[index];
+                                            // const eachFieldsDom = fieldsDom.current[index];
                                             return (
                                                 <div key={key}>
                                                     <>
-                                                        {!hideMiniTitle && key && (eachFieldsDom ? eachFieldsDom.childNodes?.length > 0 : true) && (
+                                                        {!hideMiniTitle && key && (
                                                             <div className="border-bottom-normal padding-bottom-8 margin-vertical-16">
                                                                 <SvgIcon
                                                                     name="TitleSetting"
@@ -344,6 +378,7 @@ function ConfigValueBox({
                                                                     onChangeDefinition,
                                                                     managerType,
                                                                     officalDefinition: !!definitionForManager?.isDefault,
+                                                                    categoryKey: key
                                                                     // selectParamsType
                                                                 })}
                                                             </div>
@@ -354,7 +389,19 @@ function ConfigValueBox({
                                         })}
                                 </div>
                             </div>
-                            <div className={classNames(styles['manager-params-docs'], 'width-percent-40 background-grey-3 border-radius-16')}> params detail </div>
+                            <div className={classNames(styles['manager-params-docs'], 'width-percent-40 background-grey-3 border-radius-16 position-re', showProfileDocs ? '' : 'width-1-important min-width-1 margin-right-16')}>
+                                <Anchor onClick={() => setShowProfileDocs(!showProfileDocs)} className="background-color-white border-default-grey-1 border-radius-12 position-ab left-minus-12 bottom-24">
+                                    <SvgIcon
+                                        name="MainToolbarBack"
+                                        size={24}
+                                        type={['static']}
+                                        className={classNames(showProfileDocs ? 'rotate180' : '')}
+                                    />
+                                </Anchor>
+                                {showProfileDocs && (
+                                    <div dangerouslySetInnerHTML={{ __html: htmlContent }} />
+                                )}
+                            </div>
                         </div>
                     </>
                 )}

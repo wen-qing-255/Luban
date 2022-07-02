@@ -445,6 +445,7 @@ export const actions = {
         series = getRealSeries(series);
         // await dispatch(machineActions.updateMachineToolHead(toolHead, series, CONFIG_HEADTYPE));
         const currentMachine = getMachineSeriesWithToolhead(series, toolHead);
+        const profileDocsDir = await api.getProfileDocsDir();
         const profileLevel = await definitionManager.init(
             CONFIG_HEADTYPE,
             currentMachine.configPathname[CONFIG_HEADTYPE]
@@ -475,7 +476,8 @@ export const actions = {
                     support: LEFT_EXTRUDER_MAP_NUMBER
                 },
                 extruderLDefinition: definitionManager.extruderLDefinition,
-                extruderRDefinition: definitionManager.extruderRDefinition
+                extruderRDefinition: definitionManager.extruderRDefinition,
+                profileDocsDir: profileDocsDir.body.profileDocsDir
             })
         );
 
