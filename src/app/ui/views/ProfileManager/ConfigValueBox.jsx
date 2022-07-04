@@ -147,7 +147,7 @@ function ConfigValueBox({
             if (selectParamsType === 'custom' || includes(settings[profileKey].filter, selectParamsType)) {
                 if (settings[profileKey].childKey.length > 0) {
                     return (
-                        <div>
+                        <div className={`margin-left-${(settings[profileKey].zIndex - 1) * 16}`}>
                             <SettingItem
                                 settings={settings}
                                 definitionKey={profileKey}
