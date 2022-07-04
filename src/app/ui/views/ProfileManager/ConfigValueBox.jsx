@@ -4,6 +4,7 @@ import { includes, throttle } from 'lodash';
 import classNames from 'classnames';
 import i18next from 'i18next';
 import { useSelector } from 'react-redux';
+import ReactMarkdown from 'react-markdown';
 import Menu from '../../components/Menu';
 import i18n from '../../../lib/i18n';
 import SettingItem from './SettingItem';
@@ -36,18 +37,20 @@ function ConfigValueBox({
     const [showProfileDocs, setShowProfileDocs] = useState(true);
     const [selectProfile, setSelectProfile] = useState('');
     const [selectCategory, setSelectCategory] = useState('');
-    const [htmlContent, setHtmlContent] = useState('');
+    const [mdContent, setMdContent] = useState('');
     const scrollDom = useRef(null);
     const fieldsDom = useRef([]);
     const { profileDocsDir } = useSelector(state => state?.printing);
     const lang = i18next.language;
     useEffect(() => {
-        try {
-            const content = fs.readFileSync(`${profileDocsDir}/${lang.toUpperCase()}/${selectCategory}/${selectProfile}.html`, 'utf-8');
-            setHtmlContent(content);
-        } catch (e) {
-            console.info(e);
-            setHtmlContent('');
+        if (selectCategory && selectProfile) {
+            try {
+                const content = fs.readFileSync(`${profileDocsDir}/${lang.toUpperCase()}/${selectCategory}/${selectProfile}.md`, 'utf-8');
+                setMdContent(content);
+            } catch (e) {
+                console.info(e);
+                setMdContent('');
+            }
         }
     }, [selectProfile]);
     function setActiveCate(cateId) {
@@ -399,7 +402,9 @@ function ConfigValueBox({
                                     />
                                 </Anchor>
                                 {showProfileDocs && (
-                                    <div dangerouslySetInnerHTML={{ __html: htmlContent }} />
+                                    <ReactMarkdown>
+                                        {mdContent}
+                                    </ReactMarkdown>
                                 )}
                             </div>
                         </div>

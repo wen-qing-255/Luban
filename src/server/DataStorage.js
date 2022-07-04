@@ -75,7 +75,7 @@ class DataStorage {
 
         this.sessionDir = `${this.userDataDir}/Sessions`;
         this.userCaseDir = `${this.userDataDir}/UserCase`;
-        this.profileDocsDir = `${this.userDataDir}\\ProfileDocs`;
+        this.profileDocsDir = `${this.userDataDir}/ProfileDocs`;
         this.tmpDir = `${this.userDataDir}/Tmp`;
         this.configDir = `${this.userDataDir}/Config`;
         this.defaultConfigDir = `${this.userDataDir}/Default`;
@@ -409,7 +409,7 @@ class DataStorage {
 
     async initProfileDocs() {
         mkdirp.sync(this.profileDocsDir);
-        const PROFILE_DOCS_LOCAL = '../../resources/profile_docs/';
+        const PROFILE_DOCS_LOCAL = '../../resources/ProfileDocs/';
         if (fs.existsSync(PROFILE_DOCS_LOCAL)) {
             const files = fs.readdirSync(PROFILE_DOCS_LOCAL);
             for (const file of files) {
