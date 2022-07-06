@@ -47,7 +47,7 @@ function calculateTextIndex(key) {
 }
 
 
-function ParamItem({ selectedDefinitionModel, allParams }) {
+export function ParamItem({ selectedDefinitionModel, allParams }) {
     const selectedDefinitionSettings = selectedDefinitionModel.settings;
     const dispatch = useDispatch();
 

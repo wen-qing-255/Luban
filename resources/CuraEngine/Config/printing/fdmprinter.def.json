@@ -884,16 +884,16 @@
                             "default_value": "PLA",
                             "type": "enum",
                             "options": {
-                                "[PLA]": "PLA",
-                                "[Support]": "Support",
-                                "[ABS]": "ABS",
-                                "[PTEG]": "PTEG",
-                                "[TPE]": "TPE",
-                                "[PVA]": "PVA",
-                                "[ASA]": "ASA",
-                                "[PC]": "PC",
-                                "[Nylon]": "Nylon",
-                                "[Other]": "Other"
+                                "PLA": "PLA",
+                                "Support": "Support",
+                                "ABS": "ABS",
+                                "PTEG": "PTEG",
+                                "TPE": "TPE",
+                                "PVA": "PVA",
+                                "ASA": "ASA",
+                                "PC": "PC",
+                                "Nylon": "Nylon",
+                                "Other": "Other"
                             },
                             "filter": [
                                 "basic",
@@ -1773,7 +1773,12 @@
                             "minimum_value_warning": "0.04",
                             "maximum_value_warning": "0.8 * Math.min('machine_nozzle_size')",
                             "settable_per_mesh": false,
-                            "settable_per_extruder": false
+                            "settable_per_extruder": false,
+                            "filter": [
+                                "all",
+                                "basic",
+                                "efficiency"
+                            ]
                         },
                         "layer_height_0": {
                             "label": "Initial Layer Height",
@@ -1881,7 +1886,8 @@
                                     "value": "line_width",
                                     "enabled": "resolveOrValue(\"adhesion_type\") === \"skirt\" || resolveOrValue(\"adhesion_type\") === \"brim\" || resolveOrValue(\"prime_tower_brim_enable\")",
                                     "settable_per_mesh": false,
-                                    "settable_per_extruder": true
+                                    "settable_per_extruder": true,
+                                    "filter": ["basic", "all"]
                                 },
                                 "support_line_width": {
                                     "label": "Support Line Width",
@@ -2806,7 +2812,6 @@
                             "minimum_value": "0",
                             "maximum_value": "",
                             "settable_per_mesh": true,
-                            "enabled": "",
                             "filter": [
                                 "all",
                                 "basic"

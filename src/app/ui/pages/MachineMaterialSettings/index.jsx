@@ -70,7 +70,9 @@ const MachineMaterialSettings = ({ isPopup, onClose, onCallBack }) => {
                     />
                 )}
                 {selectTab === MATERIAL_TAB && (
-                    <MaterialSettings />
+                    <MaterialSettings
+                        toolHead={currentToolhead}
+                    />
                 )}
             </div>
         </div>

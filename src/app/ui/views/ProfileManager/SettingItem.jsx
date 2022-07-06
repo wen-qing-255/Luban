@@ -8,8 +8,6 @@ import Checkbox from '../../components/Checkbox';
 import Anchor from '../../components/Anchor';
 import ColorSelector from '../../components/ColorSelector';
 import { HEAD_CNC, PRINTING_MATERIAL_CONFIG_COLORS } from '../../../constants';
-import Anchor from '../../components/Anchor';
-import TipTrigger from '../../components/TipTrigger';
 import SvgIcon from '../../components/SvgIcon';
 import Popover from '../../components/Popover';
 import styles from './styles.styl';
@@ -71,117 +69,115 @@ function SettingItem({ definitionKey, settings, isDefaultDefinition = false, onC
     if (!setting) {
         return null;
     }
-    const { label, description, type, unit = '', enabled, options, min, max } = setting;
+    const { label, type, unit = '', options, min, max } = setting;
     const settingDefaultValue = setting.default_value;
     const isDefault = defaultValue && (defaultValue.value === settingDefaultValue);
-    if (typeof enabled === 'string') {
-        if (enabled.indexOf(' and ') !== -1) {
-            const andConditions = enabled.split(' and ').map(c => c.trim());
-            for (const condition of andConditions) {
-            // parse resolveOrValue('adhesion_type') == 'skirt'
-                const enabledKey = condition.match("resolveOrValue\\('(.[^)|']*)'") ? condition.match("resolveOrValue\\('(.[^)|']*)'")[1] : null;
-                const enabledEqualValue = condition.match("== ?'(.[^)|']*)'") ? condition.match("== ?'(.[^)|']*)'")[1] : null;
-                const enabledUnequalValue = condition.match("!= ?'(.[^)|']*)'") ? condition.match("!= ?'(.[^)|']*)'")[1] : null;
-                const enabledGreaterValue = condition.match('> ?([0-9]+)') ? condition.match('> ?([0-9]+)')[1] : null;
-                const enabledLessValue = condition.match('< ?([0-9]+)') ? condition.match('< ?([0-9]+)')[1] : null;
-                if (enabledKey) {
-                    if (settings[enabledKey]) {
-                        const value = settings[enabledKey].default_value;
-                        if (enabledEqualValue && value !== enabledEqualValue) {
-                            return null;
-                        }
-                        if (enabledUnequalValue && value === enabledUnequalValue) {
-                            return null;
-                        }
-                        if (enabledGreaterValue && value <= enabledGreaterValue) {
-                            return null;
-                        }
-                        if (enabledLessValue && value >= enabledLessValue) {
-                            return null;
-                        }
-                        if (settings[enabledKey].type === 'bool' && !value) {
-                            return null;
-                        }
-                    }
-                } else {
-                    if (settings[condition]) {
-                        const value = settings[condition].default_value;
-                        if (!value) {
-                            return null;
-                        }
-                    }
-                }
-            }
-        } else {
-            const orConditions = enabled.split(' or ')
-                .map(c => c.trim());
-            let result = false;
-            for (const condition of orConditions) {
-                if (settings[condition]) {
-                    const value = settings[condition].default_value;
-                    if (value) {
-                        result = true;
-                    }
-                }
-                if (condition.match('(.*) > ([0-9]+)')) {
-                    const m = condition.match('(.*) > ([0-9]+)');
-                    const enabledKey = m[1];
-                    const enabledValue = parseInt(m[2], 10);
-                    if (settings[enabledKey]) {
-                        const value = settings[enabledKey].default_value;
-                        if (value > enabledValue) {
-                            result = true;
-                        }
-                    }
-                }
-                if (condition.match('(.*) < ([0-9]+)')) {
-                    const m = condition.match('(.*) > ([0-9]+)');
-                    const enabledKey = m[1];
-                    const enabledValue = parseInt(m[2], 10);
-                    if (settings[enabledKey]) {
-                        const value = settings[enabledKey].default_value;
-                        if (value < enabledValue) {
-                            result = true;
-                        }
-                    }
-                }
-                if (condition.match("resolveOrValue\\('(.[^)|']*)'")) {
-                    const m1 = condition.match("resolveOrValue\\('(.[^)|']*)'");
-                    const m2 = condition.match("== ?'(.[^)|']*)'");
-                    const enabledKey = m1[1];
-                    const enabledValue = (m2 && m2[1]) || true;
-                    if (settings[enabledKey]) {
-                        const value = settings[enabledKey].default_value;
-                        if (value === enabledValue) {
-                            result = true;
-                        }
-                    }
-                }
-            }
-            if (!result) {
-                return null;
-            }
-        }
-    } else if (typeof enabled === 'boolean' && enabled === false) {
-        return null;
-    }
+    // if (typeof enabled === 'string') {
+    //     if (enabled.indexOf(' and ') !== -1) {
+    //         const andConditions = enabled.split(' and ').map(c => c.trim());
+    //         for (const condition of andConditions) {
+    //         // parse resolveOrValue('adhesion_type') == 'skirt'
+    //             const enabledKey = condition.match("resolveOrValue\\('(.[^)|']*)'") ? condition.match("resolveOrValue\\('(.[^)|']*)'")[1] : null;
+    //             const enabledEqualValue = condition.match("== ?'(.[^)|']*)'") ? condition.match("== ?'(.[^)|']*)'")[1] : null;
+    //             const enabledUnequalValue = condition.match("!= ?'(.[^)|']*)'") ? condition.match("!= ?'(.[^)|']*)'")[1] : null;
+    //             const enabledGreaterValue = condition.match('> ?([0-9]+)') ? condition.match('> ?([0-9]+)')[1] : null;
+    //             const enabledLessValue = condition.match('< ?([0-9]+)') ? condition.match('< ?([0-9]+)')[1] : null;
+    //             if (enabledKey) {
+    //                 if (settings[enabledKey]) {
+    //                     const value = settings[enabledKey].default_value;
+    //                     if (enabledEqualValue && value !== enabledEqualValue) {
+    //                         return null;
+    //                     }
+    //                     if (enabledUnequalValue && value === enabledUnequalValue) {
+    //                         return null;
+    //                     }
+    //                     if (enabledGreaterValue && value <= enabledGreaterValue) {
+    //                         return null;
+    //                     }
+    //                     if (enabledLessValue && value >= enabledLessValue) {
+    //                         return null;
+    //                     }
+    //                     if (settings[enabledKey].type === 'bool' && !value) {
+    //                         return null;
+    //                     }
+    //                 }
+    //             } else {
+    //                 if (settings[condition]) {
+    //                     const value = settings[condition].default_value;
+    //                     if (!value) {
+    //                         return null;
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //     } else {
+    //         const orConditions = enabled.split(' or ')
+    //             .map(c => c.trim());
+    //         let result = false;
+    //         for (const condition of orConditions) {
+    //             if (settings[condition]) {
+    //                 const value = settings[condition].default_value;
+    //                 if (value) {
+    //                     result = true;
+    //                 }
+    //             }
+    //             if (condition.match('(.*) > ([0-9]+)')) {
+    //                 const m = condition.match('(.*) > ([0-9]+)');
+    //                 const enabledKey = m[1];
+    //                 const enabledValue = parseInt(m[2], 10);
+    //                 if (settings[enabledKey]) {
+    //                     const value = settings[enabledKey].default_value;
+    //                     if (value > enabledValue) {
+    //                         result = true;
+    //                     }
+    //                 }
+    //             }
+    //             if (condition.match('(.*) < ([0-9]+)')) {
+    //                 const m = condition.match('(.*) > ([0-9]+)');
+    //                 const enabledKey = m[1];
+    //                 const enabledValue = parseInt(m[2], 10);
+    //                 if (settings[enabledKey]) {
+    //                     const value = settings[enabledKey].default_value;
+    //                     if (value < enabledValue) {
+    //                         result = true;
+    //                     }
+    //                 }
+    //             }
+    //             if (condition.match("resolveOrValue\\('(.[^)|']*)'")) {
+    //                 const m1 = condition.match("resolveOrValue\\('(.[^)|']*)'");
+    //                 const m2 = condition.match("== ?'(.[^)|']*)'");
+    //                 const enabledKey = m1[1];
+    //                 const enabledValue = (m2 && m2[1]) || true;
+    //                 if (settings[enabledKey]) {
+    //                     const value = settings[enabledKey].default_value;
+    //                     if (value === enabledValue) {
+    //                         result = true;
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //         if (!result) {
+    //             return null;
+    //         }
+    //     }
+    // } else if (typeof enabled === 'boolean' && enabled === false) {
+    //     return null;
+    // }
     const opts = [];
     if (options) {
         Object.keys(options).forEach((k) => {
             opts.push({
-                value: k,
+                value: k.toLocaleLowerCase(),
                 label: i18n._(options[k])
             });
         });
     }
 
     return (
-        <div className="position-re sm-flex justify-space-between height-32 margin-vertical-8">
-            <TipTrigger title={i18n._(label)} content={i18n._(description)} key={definitionKey}>
-                <span className="text-overflow-ellipsis width-auto main-text-normal" style={{ maxWidth: '171px' }}>
-                    {i18n._(label)}
-                </span>
-            </TipTrigger>
+        <Anchor className="position-re sm-flex justify-space-between height-32 margin-vertical-8" onClick={() => onClick(categoryKey, definitionKey)}>
+            <span className="text-overflow-ellipsis width-auto main-text-normal" style={{ maxWidth: '171px' }}>
+                {i18n._(label)}
+            </span>
             <div className="sm-flex-auto">
                 {isProfile && !isDefault && (
                     <SvgIcon
@@ -239,7 +235,7 @@ function SettingItem({ definitionKey, settings, isDefaultDefinition = false, onC
                         name={definitionKey}
                         // disabled={!isDefinitionEditable()}
                         options={opts}
-                        value={settingDefaultValue}
+                        value={settingDefaultValue.toLocaleLowerCase()}
                         onChange={(option) => {
                             onChangeDefinition(definitionKey, option.value);
                         }}
@@ -299,7 +295,7 @@ function SettingItem({ definitionKey, settings, isDefaultDefinition = false, onC
                     </Popover>
                 )}
             </div>
-        </div>
+        </Anchor>
     );
 }
 SettingItem.propTypes = {

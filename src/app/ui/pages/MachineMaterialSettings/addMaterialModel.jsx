@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import PropTypes from 'prop-types';
-import { Popover } from 'antd';
+import Popover from '../../components/Popover';
 import i18n from '../../../lib/i18n';
 import Modal from '../../components/Modal';
 import Select from '../../components/Select';
@@ -22,7 +22,8 @@ const materialTypeOptions = [{
 }];
 
 const AddMaterialModel = ({
-    setShowCreateMaterialModal
+    setShowCreateMaterialModal,
+    onSubmit
 }) => {
     const [materialType, setMaterialType] = useState('PLA');
     const [materialName, setMaterialName] = useState('');
@@ -32,7 +33,7 @@ const AddMaterialModel = ({
     const [printingTemperatureDown, setPrintingTemperatureDown] = useState(null);
     const [buildPlateTemperatureDown, setBuildPlateTemperatureDown] = useState(null);
     const [buildPlateTemperatureUp, setBuildPlateTemperatureUp] = useState(null);
-    const [openFan, setOpenFan] = useState(true);
+    const [openFan, setOpenFan] = useState(false);
     return (
         <Modal
             onClose={() => setShowCreateMaterialModal(false)}
@@ -47,7 +48,7 @@ const AddMaterialModel = ({
                 </div>
                 <div className="sm-flex">
                     <div className="width-232 height-232 margin-right-24">
-                        <img src="/resources/images/machine/size-2.0-A150.png" alt="" className="width-percent-100 height-percent-100" />
+                        <img src="/resources/images/3dp/pic_material_label.png" alt="" className="width-percent-100 height-percent-100" />
                     </div>
                     <div className="width-360">
                         <div className="sm-flex justify-space-between align-center margin-bottom-8">
@@ -82,6 +83,11 @@ const AddMaterialModel = ({
                                     )}
                                     trigger="click"
                                     placement="bottomRight"
+                                    visible={showColor}
+                                    className="cancel-content-padding"
+                                    onVisibleChange={(visible) => {
+                                        setShowColor(visible);
+                                    }}
                                 >
                                     <span
                                         className="sm-flex-width align-r height-percent-100 width-96 display-inline border-radius-8 border-default-black-5"
@@ -150,6 +156,7 @@ const AddMaterialModel = ({
                         className="margin-left-8"
                         width="96px"
                         type="default"
+                        onClick={() => setShowCreateMaterialModal(false)}
                     >
                         {i18n._('key-Modal/Common-Cancel')}
                     </Button>
@@ -158,6 +165,14 @@ const AddMaterialModel = ({
                         className="margin-left-8"
                         width="96px"
                         type="primary"
+                        onClick={() => onSubmit({
+                            type: materialType,
+                            color: materialColor,
+                            name: materialName,
+                            printingTemperature: printingTemperatureUp || printingTemperatureDown,
+                            buildPlateTemperature: buildPlateTemperatureUp || buildPlateTemperatureDown,
+                            openFan: openFan
+                        })}
                     >
                         {i18n._('key-Modal/Common-OK')}
                     </Button>
@@ -168,7 +183,8 @@ const AddMaterialModel = ({
 };
 
 AddMaterialModel.propTypes = {
-    setShowCreateMaterialModal: PropTypes.func
+    setShowCreateMaterialModal: PropTypes.func,
+    onSubmit: PropTypes.func
 };
 
 export default AddMaterialModel;

@@ -295,7 +295,10 @@ const INITIAL_STATE = {
         extruderRlineWidth: 0,
         layerHeight0: 0,
         layerHeight: 0,
-    }
+    },
+    // profile manager params type
+    printingParamsType: 'basic',
+    materialParamsType: 'basic'
 };
 
 const ACTION_UPDATE_STATE = 'printing/ACTION_UPDATE_STATE';
@@ -525,6 +528,18 @@ export const actions = {
 
         // Re-position model group
         gcodeLineGroup.position.set(-size.x / 2, -size.y / 2, 0);
+    },
+
+    updateProfileParamsType: (managerType, value) => (dispatch) => {
+        if (managerType === PRINTING_MANAGER_TYPE_MATERIAL) {
+            dispatch(actions.updateState({
+                materialParamsType: value
+            }));
+        } else {
+            dispatch(actions.updateState({
+                printingParamsType: value
+            }));
+        }
     },
 
     updateBoundingBox: () => (dispatch, getState) => {

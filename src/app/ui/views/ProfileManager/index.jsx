@@ -3,7 +3,7 @@ import classNames from 'classnames';
 import PropTypes from 'prop-types';
 // import { useSelector, shallowEqual } from 'react-redux';
 import { isUndefined, cloneDeep, uniqWith } from 'lodash';
-import { Popover } from 'antd';
+import Popover from '../../components/Popover';
 import { HEAD_CNC, HEAD_LASER, PRINTING_MANAGER_TYPE_MATERIAL, PRINTING_MANAGER_TYPE_QUALITY } from '../../../constants';
 import modal from '../../../lib/modal';
 import DefinitionCreator from '../DefinitionCreator';
@@ -86,7 +86,7 @@ function useGetDefinitions(allDefinitions, activeDefinitionID, getDefaultDefinit
                 selectedSettingDefaultValue = prev.selectedSettingDefaultValue;
             } else {
                 definitionForManager = allDefinitions.find(d => d.definitionId === activeDefinitionID) || allDefinitions[0];
-                selectedSettingDefaultValue = getDefaultDefinition(definitionForManager.definitionId);
+                selectedSettingDefaultValue = getDefaultDefinition(definitionForManager?.definitionId);
             }
             return {
                 definitionOptions,
@@ -441,6 +441,32 @@ function ProfileManager({
                 result = result && actions.checkDefault(configList[key], definitionForManager, selectedSettingDefaultValue);
             });
             return result;
+        },
+        handleAddMaterial: async (data) => {
+            const newDefinitionForManager = cloneDeep(definitionState.definitionForManager);
+            newDefinitionForManager.category = data.type;
+            newDefinitionForManager.name = data.name;
+            if (Object.keys(newDefinitionForManager.settings).length === 0) {
+                newDefinitionForManager.settings = cloneDeep(allDefinitions[0].settings);
+            }
+            newDefinitionForManager.settings = {
+                ...newDefinitionForManager.settings,
+                color: {
+                    default_value: data.color
+                },
+                material_print_temperature: {
+                    default_value: data.printingTemperature
+                },
+                cool_fan_speed: {
+                    default_value: data.openFan ? 100 : 0
+                },
+                material_bed_temperature: {
+                    default_value: data.buildPlateTemperature
+                }
+            };
+            setShowCreateMaterialModal(false);
+            const newDefinition = await outsideActions.onCreateManagerDefinition(newDefinitionForManager, data.name, false, true);
+            actions.onSelectDefinitionById(newDefinition.definitionId, newDefinition.name);
         }
     };
 
@@ -600,12 +626,9 @@ function ProfileManager({
                                                                                             )}
                                                                                         >
                                                                                             <SvgIcon
-                                                                                                name="Reset"
+                                                                                                name="More"
                                                                                                 size={24}
                                                                                                 className="margin-left-n-30"
-                                                                                                onClick={() => {
-                                                                                                    actions.resetDefinition(currentOption.value);
-                                                                                                }}
                                                                                             />
                                                                                         </Popover>
                                                                                     </div>
@@ -623,6 +646,20 @@ function ProfileManager({
                                         }))}
                                     </div>
                                     <div>
+                                        <input
+                                            ref={refs.fileInput}
+                                            type="file"
+                                            accept=".json"
+                                            style={{ display: 'none' }}
+                                            multiple={false}
+                                            onChange={async (e) => {
+                                                const definition = await outsideActions.onChangeFileForManager(e);
+                                                actions.onSelectDefinitionById(
+                                                    definition.definitionId,
+                                                    definition.name
+                                                );
+                                            }}
+                                        />
                                         <Popover
                                             trigger="click"
                                             placement="topLeft"
@@ -631,6 +668,8 @@ function ProfileManager({
                                                     <Anchor onClick={() => {
                                                         if (managerType === PRINTING_MANAGER_TYPE_MATERIAL) {
                                                             setShowCreateMaterialModal(true);
+                                                        } else {
+                                                            actions.showNewModal();
                                                         }
                                                     }}
                                                     >
@@ -640,17 +679,17 @@ function ProfileManager({
                                                                 className="margin-bottom-8"
                                                                 size={48}
                                                             />
-                                                            <span className="display-inline width-percent-100 text-overflow-ellipsis">{i18n._('key-Printing/ProfileManager-Create')}</span>
+                                                            <span className="display-inline width-percent-100 text-overflow-ellipsis align-c">{i18n._('key-Printing/ProfileManager-Create')}</span>
                                                         </div>
                                                     </Anchor>
-                                                    <Anchor>
+                                                    <Anchor onClick={() => actions.importFile(refs.fileInput)}>
                                                         <div className="width-112 height-88 sm-flex sm-flex-direction-c align-center">
                                                             <SvgIcon
                                                                 name="TitleSetting"
                                                                 className="margin-bottom-8"
                                                                 size={48}
                                                             />
-                                                            <span className="display-inline width-percent-100 text-overflow-ellipsis">{i18n._('key-Printing/ProfileManager-Import')}</span>
+                                                            <span className="display-inline width-percent-100 text-overflow-ellipsis align-c">{i18n._('key-Printing/ProfileManager-Import')}</span>
                                                         </div>
                                                     </Anchor>
                                                 </div>
@@ -684,6 +723,7 @@ function ProfileManager({
                             {showCreateMaterialModal && managerType === PRINTING_MANAGER_TYPE_MATERIAL && (
                                 <AddMaterialModel
                                     setShowCreateMaterialModal={setShowCreateMaterialModal}
+                                    onSubmit={(data) => actions.handleAddMaterial(data)}
                                 />
                             )}
                         </div>
