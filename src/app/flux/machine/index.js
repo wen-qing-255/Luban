@@ -1098,7 +1098,6 @@ export const actions = {
         await dispatch(baseActions.updateState({
             printingCustomConfigsWithCategory: newConfig
         }));
-        console.log({ newConfig });
         machineStore.set('printingCustomConfigsWithCategory', newConfig);
     },
     updateMultipleEngine: () => (dispatch, getState) => {

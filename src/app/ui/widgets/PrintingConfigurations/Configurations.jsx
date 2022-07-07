@@ -29,6 +29,7 @@ import {
     SINGLE_EXTRUDER_TOOLHEAD_FOR_SM2
 } from '../../../constants';
 import SettingItem from '../../views/ProfileManager/SettingItem';
+/* eslint-disable import/no-cycle */
 import ConfigValueBox from '../../views/ProfileManager/ConfigValueBox';
 import styles from './styles.styl';
 import { getPresetOptions } from '../../utils/profileManager';
