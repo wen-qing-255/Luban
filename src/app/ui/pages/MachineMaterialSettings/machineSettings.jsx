@@ -210,10 +210,6 @@ const defaultNozzleDiameterListForDualExtruder = [{
     label: '0.4',
     isDefault: true
 }, {
-    value: '0.4H',
-    label: '0.4H',
-    isDefault: true
-}, {
     value: 0.6,
     label: '0.6',
     isDefault: true
@@ -250,6 +246,11 @@ const MachineSettings = ({
     const [addDiameterStatus, setAddDiameterStatus] = useState(false);
     const handleMachineUpdate = (value) => {
         setCurrentSerial(value);
+        if (value === MACHINE_SERIES.ORIGINAL.value) {
+            setCurrentToolHead(SINGLE_EXTRUDER_TOOLHEAD_FOR_ORIGINAL);
+        } else {
+            setCurrentToolHead(SINGLE_EXTRUDER_TOOLHEAD_FOR_SM2);
+        }
     };
     const handleAddDiameter = (status) => {
         setAddDiameterStatus(status);
@@ -312,7 +313,10 @@ const MachineSettings = ({
 
     useEffect(() => {
         setSeries(currentSerial);
-        setToolhead(currentToolHead);
+        setToolhead({
+            ...toolHead,
+            [`${headType}Toolhead`]: currentToolHead
+        });
         if (currentToolHead === DUAL_EXTRUDER_TOOLHEAD_FOR_SM2) {
             switch (currentSerial) {
                 case MACHINE_SERIES.A400.value:

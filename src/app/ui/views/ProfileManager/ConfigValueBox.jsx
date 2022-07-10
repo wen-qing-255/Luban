@@ -33,12 +33,13 @@ function ConfigValueBox({
     showMiddle = false,
     hideMiniTitle = false,
     managerType,
+    customMode,
+    setCustomMode,
     onChangeCustomConfig
 }) {
     const { profileDocsDir, printingParamsType, materialParamsType } = useSelector(state => state?.printing);
     const [activeCateId, setActiveCateId] = useState(2);
     const [selectParamsType, setSelectParamsType] = useState(managerType === PRINTING_MANAGER_TYPE_MATERIAL ? materialParamsType : printingParamsType);
-    const [customMode, setCustomMode] = useState(false);
     const [showProfileDocs, setShowProfileDocs] = useState(true);
     const [selectProfile, setSelectProfile] = useState('');
     const [selectCategory, setSelectCategory] = useState('');
@@ -289,6 +290,7 @@ function ConfigValueBox({
                                 handleUpdateParamsType(e);
                             }}
                             bordered={false}
+                            disabled={customMode}
                         />
                         {managerType === PRINTING_MANAGER_TYPE_QUALITY && selectParamsType === 'all' && (
                             <Select
@@ -301,6 +303,7 @@ function ConfigValueBox({
                                 onChange={(e) => {
                                     setSelectQualityDetailType(e.value);
                                 }}
+                                disabled={customMode}
                             />
                         )}
                     </div>
@@ -498,6 +501,8 @@ ConfigValueBox.propTypes = {
     hideMiniTitle: PropTypes.bool,
     managerType: PropTypes.string,
     onChangeCustomConfig: PropTypes.func,
+    customMode: PropTypes.bool,
+    setCustomMode: PropTypes.func,
     // isFromPrinting: PropTypes.bool
 };
 

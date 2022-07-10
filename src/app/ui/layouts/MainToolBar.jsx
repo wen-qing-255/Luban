@@ -87,7 +87,7 @@ class MainToolBar extends PureComponent {
                                     <span className="width-130 text-overflow-ellipsis display-inline">{i18n._(`key-Luban/Machine/MachineSeries-${machineInfo?.series}`)}</span>
                                 </div>
                                 <div className="margin-left-14 opacity-precent-50">
-                                    {i18n._(`key-Luban/Machine/Brand-${MACHINE_BRAND_MAP[machineInfo.series]}`)}
+                                    {i18n._(`key-Luban/Machine/Brand-${MACHINE_BRAND_MAP[machineInfo?.series]}`)}
                                 </div>
                             </div>
                             <div className="width-192 sm-flex sm-flex-direction-c">

@@ -31,7 +31,7 @@ import AddMaterialModel from '../../pages/MachineMaterialSettings/addMaterialMod
  *
  * @ExportType                  ×    |     ×
  */
-
+const DEFAULT_DISPLAY_TYPE = 'key-default_category-Default';
 function creatCateArray(optionList) {
     const cates = [];
     optionList.forEach(option => {
@@ -52,7 +52,7 @@ function creatCateArray(optionList) {
     return cates;
 }
 
-function useGetDefinitions(allDefinitions, activeDefinitionID, getDefaultDefinition, managerType) {
+export function useGetDefinitions(allDefinitions, activeDefinitionID, getDefaultDefinition, managerType) {
     const [definitionState, setDefinitionState] = useSetState({
         activeDefinitionID,
         definitionForManager: allDefinitions.find(d => d.definitionId === activeDefinitionID),
@@ -118,6 +118,7 @@ function ProfileManager({
         renameInput: useRef(null),
         refCreateModal: useRef(null)
     };
+    const [customMode, setCustomMode] = useState(false);
     const [definitionState, setDefinitionState] = useGetDefinitions(allDefinitions, activeDefinitionID, outsideActions.getDefaultDefinition, managerType);
     const [showCreateMaterialModal, setShowCreateMaterialModal] = useState(false);
     const currentDefinitions = useRef(allDefinitions);
@@ -280,6 +281,9 @@ function ProfileManager({
                     i18n: option.i18nCategory
                 };
             });
+            !isCreate && (materialOptions = materialOptions.filter((option) => {
+                return option.value !== i18n._(DEFAULT_DISPLAY_TYPE);
+            }));
             materialOptions = uniqWith(materialOptions, (a, b) => {
                 return a.label === b.label;
             });
@@ -477,7 +481,7 @@ function ProfileManager({
                     size="lg-profile-manager"
                     className={classNames(styles['manager-body'])}
                     style={{ minWidth: '700px' }}
-                    onClose={outsideActions.closeManager}
+                    onClose={customMode ? () => {} : outsideActions.closeManager}
                 >
                     <Modal.Header>
                         <div className={classNames('heading-3')}>
@@ -488,7 +492,7 @@ function ProfileManager({
                         <div
                             className={classNames(styles['manager-content'], 'sm-flex', 'background-grey-3')}
                         >
-                            <div className={classNames(styles['manager-name'], 'border-radius-8', 'padding-top-24')}>
+                            <div className={classNames(styles['manager-name'], 'border-radius-8')}>
                                 {notificationMessage && (
                                     <Notifications bsStyle="danger" onDismiss={actions.clearNotification} className="Notifications">
                                         {notificationMessage}
@@ -499,7 +503,7 @@ function ProfileManager({
                                         {(definitionState.cates.map((cate) => {
                                             const isCategorySelected = cate.category === definitionState?.definitionForManager.category;
                                             return !!cate.items.length && (
-                                                <li key={`${cate.category}`}>
+                                                <li key={`${cate.category}`} className={classNames(customMode ? styles['disable-li'] : '')}>
                                                     <Anchor
                                                         className={classNames(styles['manager-btn'], { [styles.selected]: actions.isCategorySelectedNow(cate.category) })}
                                                         onClick={() => actions.onSelectCategory(cate.category)}
@@ -567,7 +571,7 @@ function ProfileManager({
                                                                     return null;
                                                                 } else {
                                                                     return (
-                                                                        <li key={`${currentOption.value}${currentOption.label}`} className={classNames(styles['profile-li'])}>
+                                                                        <li key={`${currentOption.value}${currentOption.label}`} className={classNames(styles['profile-li'], customMode ? styles['disable-li'] : '')}>
                                                                             <div className="sm-flex align-center justify-space-between">
                                                                                 <Anchor
                                                                                     className={classNames(styles['manager-btn'], { [styles.selected]: isSelected })}
@@ -700,6 +704,7 @@ function ProfileManager({
                                                 type="default"
                                                 priority="level-two"
                                                 className="margin-left-16"
+                                                disabled={customMode}
                                             >
                                                 {i18n._('key-ProfileManager/Add Profile')}
                                             </Button>
@@ -719,6 +724,8 @@ function ProfileManager({
                                 managerType={managerType}
                                 customConfigs={customConfig}
                                 onChangeCustomConfig={onChangeCustomConfig}
+                                customMode={customMode}
+                                setCustomMode={setCustomMode}
                             />
                             {showCreateMaterialModal && managerType === PRINTING_MANAGER_TYPE_MATERIAL && (
                                 <AddMaterialModel

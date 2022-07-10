@@ -141,7 +141,7 @@ function useRenderMainToolBar() {
                 dispatch(machineActions.updateMachineSeries(currentSeries));
                 dispatch(machineActions.updateMachineToolHead({
                     ...toolHead,
-                    printingToolhead: currentToolhead
+                    printingToolhead: typeof currentToolhead === 'string' ? currentToolhead : currentToolhead.printingToolhead
                 }, currentSeries));
                 await dispatch(projectActions.clearSavedEnvironment(HEAD_PRINTING));
                 window.location.href = '/';
@@ -149,7 +149,7 @@ function useRenderMainToolBar() {
         };
         const onCallBack = (_series, _toolHead) => {
             setCurrentSeries(_series);
-            setCurrentToolHead(_toolHead);
+            setCurrentToolHead(_toolHead.printingToolhead);
         };
         return showMachineMaterialSettings && renderPopup({
             onClose,

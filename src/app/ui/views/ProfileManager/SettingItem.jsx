@@ -235,7 +235,7 @@ function SettingItem({ definitionKey, settings, isDefaultDefinition = false, onC
                         name={definitionKey}
                         // disabled={!isDefinitionEditable()}
                         options={opts}
-                        value={settingDefaultValue.toLocaleLowerCase()}
+                        value={typeof settingDefaultValue === 'string' ? settingDefaultValue.toLowerCase() : settingDefaultValue}
                         onChange={(option) => {
                             onChangeDefinition(definitionKey, option.value);
                         }}

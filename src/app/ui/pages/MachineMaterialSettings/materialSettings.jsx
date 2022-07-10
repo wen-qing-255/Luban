@@ -1,11 +1,13 @@
-import { find, includes, filter } from 'lodash';
+import { find, includes, filter, cloneDeep } from 'lodash';
 import PropTypes from 'prop-types';
 import classNames from 'classnames';
 import { CaretRightOutlined } from '@ant-design/icons';
 import React, { useEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Popover, Tooltip } from 'antd';
+import { message, Tooltip } from 'antd';
+import Popover from '../../components/Popover';
 import { actions as printingActions } from '../../../flux/printing';
+import { useGetDefinitions } from '../../views/ProfileManager';
 import i18n from '../../../lib/i18n';
 import Anchor from '../../components/Anchor';
 import { LEFT, RIGHT } from '../../../../server/constants';
@@ -22,7 +24,7 @@ const MaterialSettings = ({
     toolHead
 }) => {
     const materialActiveCategory = machineStore.get('settings.materialActiveCategory');
-    const { defaultMaterialId, defaultMaterialIdRight, materialDefinitions } = useSelector(state => state.printing);
+    const { defaultMaterialId, defaultMaterialIdRight, materialDefinitions, materialManagerDirection } = useSelector(state => state.printing);
     const [leftMaterialDefinitionId, setLeftMaterialDefinitionId] = useState(defaultMaterialId);
     const [leftMaterialDefinition, setLeftMaterialDefinition] = useState(find(materialDefinitions, { definitionId: leftMaterialDefinitionId }));
     const [rightMaterialDefinitionId, setRightMaterialDefinitionId] = useState(defaultMaterialIdRight);
@@ -32,7 +34,18 @@ const MaterialSettings = ({
     const [activeNozzle, setActiveNozzle] = useState(LEFT);
     const [showCreateMaterialModal, setShowCreateMaterialModal] = useState(false);
     const fileInput = useRef(null);
+    const currentDefinitions = useRef(materialDefinitions);
+    currentDefinitions.current = materialDefinitions;
     const dispatch = useDispatch();
+    const getDefaultDefinition = (definitionId) => {
+        return dispatch(printingActions.getDefaultDefinition(definitionId));
+    };
+    const [definitionState, setDefinitionState] = useGetDefinitions(
+        materialDefinitions,
+        materialManagerDirection === LEFT ? defaultMaterialId : defaultMaterialIdRight,
+        getDefaultDefinition,
+        PRINTING_MANAGER_TYPE_MATERIAL
+    );
     useEffect(() => {
         setLeftMaterialDefinition(find(materialDefinitions, { definitionId: leftMaterialDefinitionId }));
         setRightMaterialDefinition(find(materialDefinitions, { definitionId: rightMaterialDefinitionId }));
@@ -137,6 +150,57 @@ const MaterialSettings = ({
         ref.current.value = null;
         ref.current.click();
     };
+
+    const handleAddMaterial = async (data) => {
+        const newDefinitionForManager = cloneDeep(definitionState.definitionForManager);
+        newDefinitionForManager.category = data.type;
+        newDefinitionForManager.i18nCategory = `key-default_category-${data.type.toUpperCase()}`;
+        newDefinitionForManager.name = data.name;
+        if (Object.keys(newDefinitionForManager.settings).length === 0) {
+            newDefinitionForManager.settings = cloneDeep(materialDefinitions[0].settings);
+        }
+        newDefinitionForManager.settings = {
+            ...newDefinitionForManager.settings,
+            color: {
+                default_value: data.color
+            },
+            material_print_temperature: {
+                default_value: data.printingTemperature
+            },
+            cool_fan_speed: {
+                default_value: data.openFan ? 100 : 0
+            },
+            material_bed_temperature: {
+                default_value: data.buildPlateTemperature
+            }
+        };
+        setShowCreateMaterialModal(false);
+        const result = await dispatch(printingActions.duplicateDefinitionByType(
+            PRINTING_MANAGER_TYPE_MATERIAL,
+            newDefinitionForManager,
+            undefined,
+            data.name
+        ));
+        const selected = currentDefinitions.current.find(d => d.definitionId === result.definitionId);
+        if (selected) {
+            const selectedSettingDefaultValue = getDefaultDefinition(selected.definitionId);
+            setDefinitionState({
+                definitionForManager: selected,
+                isCategorySelected: false,
+                selectedName: selected.name,
+                selectedSettingDefaultValue: selectedSettingDefaultValue
+            });
+            if (activeNozzle === LEFT) {
+                setLeftMaterialDefinitionId(selected.definitionId);
+            } else {
+                setRightMaterialDefinitionId(selected.definitionId);
+            }
+        }
+        message.info({
+            content: <span>{i18n._('key-profileManager/Create Success')}<Anchor onClick={onShowPrintingManager}>{i18n._('key-profileManager/Open material profile')}</Anchor></span>,
+            duration: 5
+        });
+    };
     // const onChangeFileForManager = (event) => {
     //     const file = event.target.files[0];
     //     return dispatch(
@@ -190,20 +254,20 @@ const MaterialSettings = ({
                     //     );
                     // }}
                 />
-                <div className={`padding-horizontal-4 padding-vertical-4 border-radius-16 sm-flex background-grey-2 ${toolHead === DUAL_EXTRUDER_TOOLHEAD_FOR_SM2 ? 'width-532' : 'width-272'}`}>
+                <div className={`padding-horizontal-4 padding-vertical-4 border-radius-16 sm-flex background-grey-2 ${toolHead.printingToolhead === DUAL_EXTRUDER_TOOLHEAD_FOR_SM2 ? 'width-532' : 'width-272'}`}>
                     <Anchor onClick={() => setActiveNozzle(LEFT)} className={`padding-horizontal-16 padding-vertical-8 border-radius-16 width-264 height-68 ${activeNozzle === LEFT ? 'background-color-white' : ''}`}>
                         <div className="heading-3">{i18n._('key-setting/Left-Nozzle')}</div>
                         <div className="sm-flex align-center margin-top-8">
                             <div className="height-16 width-16 border-default-grey-1 " style={{ background: `${leftMaterialDefinition?.settings?.color?.default_value}` }} />
-                            <span className="margin-left-8">{i18n._(leftMaterialDefinition.i18nName)}</span>
+                            <span className="margin-left-8">{i18n._(leftMaterialDefinition?.i18nName || leftMaterialDefinition?.name)}</span>
                         </div>
                     </Anchor>
-                    {toolHead === DUAL_EXTRUDER_TOOLHEAD_FOR_SM2 && (
+                    {toolHead.printingToolhead === DUAL_EXTRUDER_TOOLHEAD_FOR_SM2 && (
                         <Anchor onClick={() => setActiveNozzle(RIGHT)} className={`padding-horizontal-16 padding-vertical-8 border-radius-16 width-264 height-68 ${activeNozzle === RIGHT ? 'background-color-white' : ''}`}>
                             <div className="heading-3">{i18n._('key-setting/Right-Nozzle')}</div>
                             <div className="sm-flex align-center margin-top-8">
                                 <div className="height-16 width-16 border-default-grey-1" style={{ background: `${rightMaterialDefinition?.settings?.color?.default_value}` }} />
-                                <span className="margin-left-8">{i18n._(rightMaterialDefinition.name)}</span>
+                                <span className="margin-left-8">{i18n._(rightMaterialDefinition?.i18nName || rightMaterialDefinition?.name)}</span>
                             </div>
                         </Anchor>
                     )}
@@ -236,10 +300,10 @@ const MaterialSettings = ({
             <div>
                 {Object.keys(definitionByCategory).map(key => {
                     return (
-                        <Anchor onClick={() => onUpdateCategory(key)} className="margin-top-36 display-block">
+                        <Anchor onClick={() => onUpdateCategory(key)} className="margin-top-36 display-block" key={key}>
                             <div className="sm-flex align-center">
                                 <CaretRightOutlined rotate={includes(activeCategory, key) ? 90 : 0} />
-                                <div className="margin-left-12 heading-3">{i18n._(definitionByCategory[key][0].i18nCategory)}</div>
+                                <div className="margin-left-12 heading-3">{i18n._(definitionByCategory[key][0].i18nCategory || 'key-default_category-Custom')}</div>
                             </div>
                             <div className={`${includes(activeCategory, key) ? 'sm-grid grid-template-columns-for-material-settings grid-row-gap-16 grid-column-gap-32' : 'display-none'}`}>
                                 {
@@ -279,6 +343,7 @@ const MaterialSettings = ({
             {showCreateMaterialModal && (
                 <AddMaterialModel
                     setShowCreateMaterialModal={setShowCreateMaterialModal}
+                    onSubmit={handleAddMaterial}
                 />
             )}
             <PrintingManager />
