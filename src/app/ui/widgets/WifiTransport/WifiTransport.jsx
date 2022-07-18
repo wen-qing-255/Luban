@@ -18,7 +18,8 @@ import {
     CONNECTION_TYPE_WIFI, WORKFLOW_STATE_IDLE, WORKFLOW_STATUS_IDLE,
     HEAD_CNC, HEAD_LASER, HEAD_PRINTING,
     LEVEL_TWO_POWER_LASER_FOR_SM2, CONNECTION_MATERIALTHICKNESS_ABORT,
-    CONNECTION_TYPE_SERIAL, CONNECTION_MATERIALTHICKNESS, CONNECTION_UPLOAD_FILE
+    CONNECTION_TYPE_SERIAL, CONNECTION_MATERIALTHICKNESS, CONNECTION_UPLOAD_FILE,
+    AUTO_MDOE, SEMI_AUTO_MODE, MANUAL_MODE
 } from '../../../constants';
 import { actions as workspaceActions, WORKSPACE_STAGE } from '../../../flux/workspace';
 import { actions as projectActions } from '../../../flux/project';
@@ -37,7 +38,6 @@ import SecondaryToolbar from '../CanvasToolbar/SecondaryToolbar';
 import GCodeParams from './GCodeParams';
 import PreviewToRunJobModal from './PreviewToRunJobModal';
 import LaserStartModal from './LaserStartModal';
-import LaserLevelingMode from './LaserLevelingMode';
 
 const changeNameInput = [];
 const suffixLength = 7;
@@ -224,8 +224,9 @@ function WifiTransport({ widgetActions, controlActions }) {
     const [selectFileType, setSelectFileType] = useState('');
     const [selectFileIndex, setSelectFileIndex] = useState(-1);
 
-    const [isUnknownGCodeType, setIsUnknownGCodeType] = useState(false);
-    const [isGCdoeFileMatchToolHead, setIsGCdoeFileMatchToolHead] = useState(false);
+    // const [isUnknownGCodeType, setIsUnknownGCodeType] = useState(false);
+    // const [isGCdoeFileMatchToolHead, setIsGCdoeFileMatchToolHead] = useState(false);
+    // const [selectedFileType, setSelectedFileType] = useState(HEAD_UNKNOWN);
     const [showPreviewToRunJobModal, setShowPreviewToRunJobModal] = useState(false);
 
     const [showPreviewModal, setShowPreviewModal] = useState(false);
@@ -317,7 +318,7 @@ function WifiTransport({ widgetActions, controlActions }) {
             }
         },
         matchingGCodeTypeAndHeadType: async () => {
-            if (isUnknownGCodeType || !isGCdoeFileMatchToolHead) {
+            if (selectFileType !== headType) {
                 setShowPreviewToRunJobModal(true);
                 return;
             }
@@ -430,13 +431,6 @@ function WifiTransport({ widgetActions, controlActions }) {
         }
     }, [isConnected]);
     useEffect(() => {
-        // if (connectionType === CONNECTION_TYPE_SERIAL || isRotate || toolHeadName !== LEVEL_TWO_POWER_LASER_FOR_SM2) {
-        //     setIsLaserAutoFocus(false);
-        //     dispatch(machineActions.updateIsLaserPrintAutoMode(false));
-        // } else {
-        //     setIsLaserAutoFocus(true);
-        //     dispatch(machineActions.updateIsLaserPrintAutoMode(true));
-        // }
         if (isRotate) {
             dispatch(machineActions.updateIsLaserPrintAutoMode(false));
         }
@@ -519,17 +513,27 @@ function WifiTransport({ widgetActions, controlActions }) {
 
 
 
-    useEffect(() => {
-        const matchMap = {
-            '3dp': HEAD_PRINTING, //  'printing';
-            'laser': HEAD_LASER,
-            'cnc': HEAD_CNC,
-        };
-        const gcodeType = gcodeFiles[selectFileIndex] && gcodeFiles[selectFileIndex].type;
-
-        setIsUnknownGCodeType(!Object.keys(matchMap).includes(gcodeType));
-        setIsGCdoeFileMatchToolHead(headType === matchMap[gcodeType]);
-    }, [headType, selectFileIndex]);
+    const onConfirm = async (type) => {
+        let isLaserAutoFocus = false;
+        switch (type) {
+            case AUTO_MDOE:
+                isLaserAutoFocus = true;
+                dispatch(machineActions.updateIsLaserPrintAutoMode(true));
+                dispatch(machineActions.updateMaterialThickness(0));
+                break;
+            case SEMI_AUTO_MODE:
+                isLaserAutoFocus = false;
+                await dispatch(machineActions.updateIsLaserPrintAutoMode(toolHeadName !== LEVEL_TWO_POWER_LASER_FOR_SM2));
+                break;
+            case MANUAL_MODE:
+                isLaserAutoFocus = false;
+                await dispatch(machineActions.updateIsLaserPrintAutoMode(false));
+                await dispatch(machineActions.updateMaterialThickness(0));
+                break;
+            default:
+        }
+        actions.loadGcodeToWorkspace(isLaserAutoFocus);
+    };
 
     return (
         <div className="border-default-grey-1 border-radius-8">
@@ -628,34 +632,7 @@ function WifiTransport({ widgetActions, controlActions }) {
                 isRotate={isRotate}
                 isSerialConnect={connectionType && connectionType === CONNECTION_TYPE_SERIAL}
                 onClose={() => setShowStartModal(false)}
-                onConfirm={(type) => {
-                    const { AUTO_MDOE, SEMI_AUTO_MODE, MANUAL_MODE } = LaserLevelingMode;
-                    let isLaserAutoFocus = false;
-                    // if (connectionType === CONNECTION_TYPE_SERIAL || isRotate || toolHeadName !== LEVEL_TWO_POWER_LASER_FOR_SM2) {
-                    //     dispatch(machineActions.updateIsLaserPrintAutoMode(false));
-                    // } else {
-                    //     isLaserAutoFocus = true
-                    //     dispatch(machineActions.updateIsLaserPrintAutoMode(true));
-                    // }
-                    switch (type) {
-                        case AUTO_MDOE:
-                            isLaserAutoFocus = true;
-                            dispatch(machineActions.updateIsLaserPrintAutoMode(true));
-                            dispatch(machineActions.updateMaterialThickness(0));
-                            break;
-                        case SEMI_AUTO_MODE:
-                            isLaserAutoFocus = false;
-                            dispatch(machineActions.updateIsLaserPrintAutoMode(toolHeadName !== LEVEL_TWO_POWER_LASER_FOR_SM2));
-                            break;
-                        case MANUAL_MODE:
-                            isLaserAutoFocus = false;
-                            dispatch(machineActions.updateIsLaserPrintAutoMode(false));
-                            dispatch(machineActions.updateMaterialThickness(0));
-                            break;
-                        default:
-                    }
-                    actions.loadGcodeToWorkspace(isLaserAutoFocus);
-                }}
+                onConfirm={(type) => onConfirm(type)}
             />
             {showPreviewModal && (
                 <Modal
@@ -755,12 +732,16 @@ function WifiTransport({ widgetActions, controlActions }) {
             )}
             {showPreviewToRunJobModal && (
                 <PreviewToRunJobModal
-                    isMismatchHead={!isUnknownGCodeType}
-                    isUnKownHead={headType !== HEAD_CNC && headType !== HEAD_LASER && headType !== HEAD_PRINTING}
-                    gcodeType={gcodeFiles[selectFileIndex] && gcodeFiles[selectFileIndex].type}
+                    // isMismatchHead={!isUnknownGCodeType}
+                    // isUnKownHead={headType !== HEAD_CNC && headType !== HEAD_LASER && headType !== HEAD_PRINTING}
+                    // gcodeType={gcodeFiles[selectFileIndex] && gcodeFiles[selectFileIndex].type}
+                    // headType={headType}
+                    // onClose={() => setShowPreviewToRunJobModal(false)}
+                    // onConfirm={actions.startPrint}
+                    selectFileType={selectFileType}
                     headType={headType}
-                    onClose={() => { setShowPreviewToRunJobModal(false); }}
-                    onConfirm={() => { actions.startPrint(); }}
+                    onClose={() => setShowPreviewToRunJobModal(false)}
+                    onConfirm={actions.startPrint}
                 />
             )}
         </div>

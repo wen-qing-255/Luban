@@ -300,9 +300,9 @@ class SocketTCP extends SocketBASE {
         });
     }
 
-    public getLaserMaterialThickness = (options: EventOptions) => {
+    public getLaserMaterialThickness = async (options: EventOptions) => {
         const { x, y, feedRate, eventName } = options;
-        this.sacpClient.getLaserMaterialThickness({
+        await this.sacpClient.getLaserMaterialThickness({
             token: '',
             x,
             y,
@@ -406,7 +406,7 @@ class SocketTCP extends SocketBASE {
         readStream.on('data', buf => {
             md5.update(buf);
         });
-        readStream.once('end', () => {
+        readStream.once('end', async () => {
             this.sacpClient.startScreenPrint({
                 headType: type, filename: uploadName, hash: md5.digest().toString('hex')
             }).then((res) => {

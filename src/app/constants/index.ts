@@ -1633,3 +1633,7 @@ export const MODULEID_MAP = {
     '512': HEADT_BED_FOR_SM2,
     '515': A400_HEADT_BED_FOR_SM2
 };
+
+export const AUTO_MDOE = Symbol('auto mode');
+export const SEMI_AUTO_MODE = Symbol('semi_auto_mode by MaterialThickness');
+export const MANUAL_MODE = Symbol('manual mode');

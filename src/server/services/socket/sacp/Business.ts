@@ -226,7 +226,6 @@ export default class Business extends Dispatcher {
     }
 
     public async getLaserMaterialThickness({ token = '', x = 0, y = 0, feedRate = 0 }) {
-        console.log(token);
         // const tokenBuffer = stringToBuffer(token);
         const buffer = Buffer.alloc(10, 0);
         let nextOffset = 0;
@@ -666,7 +665,7 @@ export default class Business extends Dispatcher {
 
     // TODO
     public async setHotBedTemperature(key: number, zoneIndex: number, temperature: number) {
-        const buffer = Buffer.alloc(1 + 1 + 2, 0);
+        const buffer = Buffer.alloc(4, 0);
         writeUint8(buffer, 0, key);
         writeUint8(buffer, 1, zoneIndex);
         writeInt16(buffer, 2, temperature);
@@ -683,7 +682,7 @@ export default class Business extends Dispatcher {
     }
 
     public async setCncPower(key: number, targetPower:number) {
-        const buffer = Buffer.alloc(1 + 1, 0);
+        const buffer = Buffer.alloc(2, 0);
         writeUint8(buffer, 0, key);
         writeUint8(buffer, 1, targetPower);
         return this.send(0x11, 0x02, PeerId.CONTROLLER, buffer).then(({ response, packet }) => {
@@ -692,7 +691,7 @@ export default class Business extends Dispatcher {
     }
 
     public async setToolHeadSpeed(key: number, targetSpeed:number) {
-        const buffer = Buffer.alloc(1 + 4, 0);
+        const buffer = Buffer.alloc(5, 0);
         writeUint8(buffer, 0, key);
         writeUint32(buffer, 1, targetSpeed);
         return this.send(0x11, 0x03, PeerId.CONTROLLER, buffer).then(({ response, packet }) => {
@@ -701,7 +700,7 @@ export default class Business extends Dispatcher {
     }
 
     public async switchCNC(key:number, status: boolean) {
-        const buffer = Buffer.alloc(1 + 1, 0);
+        const buffer = Buffer.alloc(2, 0);
         writeUint8(buffer, 0, key);
         writeBool(buffer, 1, status ? 1 : 0);
         return this.send(0x11, 0x05, PeerId.CONTROLLER, buffer).then(({ response, packet }) => {
@@ -711,7 +710,7 @@ export default class Business extends Dispatcher {
 
 
     public async setWorkSpeed(key: number, extruderIndex: number, targetSpeed:number) {
-        const buffer = Buffer.alloc(1 + 1 + 2, 0);
+        const buffer = Buffer.alloc(4, 0);
         writeUint8(buffer, 0, key);
         writeUint8(buffer, 1, extruderIndex);
         writeInt16(buffer, 2, targetSpeed);

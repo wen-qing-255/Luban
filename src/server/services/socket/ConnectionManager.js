@@ -8,7 +8,7 @@ import socketTcp from './sacp/SACP-TCP';
 import socketSerialNew from './sacp/SACP-SERIAL';
 import {
     HEAD_PRINTING, HEAD_LASER, LEVEL_TWO_POWER_LASER_FOR_SM2, MACHINE_SERIES,
-    CONNECTION_TYPE_WIFI, CONNECTION_TYPE_SERIAL, WORKFLOW_STATE_PAUSED, PORT_SCREEN_HTTP, PORT_SCREEN_SACP, SACP_PROTOCOL, STANDARD_CNC_TOOLHEAD_FOR_SM2
+    CONNECTION_TYPE_WIFI, CONNECTION_TYPE_SERIAL, WORKFLOW_STATE_PAUSED, PORT_SCREEN_HTTP, PORT_SCREEN_SACP, SACP_PROTOCOL, STANDARD_CNC_TOOLHEAD_FOR_SM2, LEVEL_ONE_POWER_LASER_FOR_SM2
 } from '../../constants';
 import DataStorage from '../../DataStorage';
 import ScheduledTasks from '../../lib/ScheduledTasks';
@@ -191,11 +191,11 @@ class ConnectionManager {
             const gcodeFilePath = `${DataStorage.tmpDir}/${uploadName}`;
             const promises = [];
             if (this.protocol === SACP_PROTOCOL && headType === HEAD_LASER) {
-                if (laserFocalLength && toolHead === LEVEL_TWO_POWER_LASER_FOR_SM2 && !isRotate && (!isLaserPrintAutoMode && materialThickness === 0)) {
+                if (laserFocalLength && toolHead === LEVEL_TWO_POWER_LASER_FOR_SM2 && !isRotate && (isLaserPrintAutoMode && materialThickness === 0)) {
                     await this.socket.laseAutoSetMaterialHeight({ toolHead });
                 }
-                if (!isLaserPrintAutoMode || materialThickness !== 0) {
-                    await this.socket.laserSetWorkHeight({ toolHead, materialThickness });
+                if (((toolHead === LEVEL_TWO_POWER_LASER_FOR_SM2 && !isLaserPrintAutoMode) || (toolHead === LEVEL_ONE_POWER_LASER_FOR_SM2 && isLaserPrintAutoMode)) && (materialThickness !== 0 || isRotate)) {
+                    await this.socket.laserSetWorkHeight({ toolHead, materialThickness, isRotate });
                 }
                 const { gcode, jogSpeed = 1500 } = options;
                 const moveOrders = [
@@ -256,7 +256,7 @@ class ConnectionManager {
             const { workflowState } = options;
             if (this.protocol === SACP_PROTOCOL) {
                 if (headType === HEAD_LASER) {
-                    if (!isLaserPrintAutoMode || materialThickness !== 0) {
+                    if (materialThickness !== 0) {
                         await this.socket.laserSetWorkHeight({ toolHead, materialThickness });
                     }
                     const { gcode, jogSpeed = 1500 } = options;

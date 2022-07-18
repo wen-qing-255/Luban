@@ -267,7 +267,7 @@ class SocketBASE {
             distances.push(item.distance);
         });
 
-        await this.sacpClient.requestAbsoluteCooridateMove(directions, distances, jogSpeed, CoordinateType.MACHINE).then(res => {
+        this.sacpClient.requestAbsoluteCooridateMove(directions, distances, jogSpeed, CoordinateType.MACHINE).then(res => {
             log.info(`Coordinate Move: ${res.response.result}`);
             this.socket && this.socket.emit('serialport:read', { data: res.response.result === 0 ? 'OK' : 'WARNING' });
             this.socket && this.socket.emit('move:status', { isMoving: false });
@@ -460,7 +460,7 @@ class SocketBASE {
         });
     }
 
-    public async setAbsoluteWorkOrigin({ x, y, z }) {
+    public async setAbsoluteWorkOrigin({ x, y, z, isRotate = false }) {
         try {
             const res1 = await this.sacpClient.updateCoordinate(CoordinateType.MACHINE);
             log.debug(`updateCoordinate CoordinateType.MACHINE res: ${JSON.stringify(res1)}`);
@@ -470,12 +470,12 @@ class SocketBASE {
                 const zNow = coordinateSystemInfo.coordinates.find(item => item.key === Direction.Z1).value;
                 log.debug(`current positions, ${xNow}, ${yNow}, ${zNow}`);
 
-                await this.sacpClient.updateCoordinate(CoordinateType.WORKSPACE);
-                const newX = new CoordinateInfo(Direction.X1, xNow - x);
-                const newY = new CoordinateInfo(Direction.Y1, yNow - y);
-                const newZ = new CoordinateInfo(Direction.Z1, zNow - z);
+                const newX = new CoordinateInfo(Direction.X1, 0);
+                const newY = new CoordinateInfo(Direction.Y1, 0);
+                const newZ = new CoordinateInfo(Direction.Z1, isRotate ? 0 : zNow - z);
                 const newCoord = [newX, newY, newZ];
                 log.debug(`new positions, ${JSON.stringify(newCoord)}`);
+                await this.sacpClient.updateCoordinate(CoordinateType.WORKSPACE);
 
                 const res = await this.sacpClient.setWorkOrigin(newCoord);
                 log.debug(`setAbsoluteWorkOrigin res:${JSON.stringify(res)}`);
@@ -487,7 +487,7 @@ class SocketBASE {
 
     //
     public async laserSetWorkHeight(options) {
-        const { toolHead, materialThickness } = options;
+        const { toolHead, materialThickness, isRotate } = options;
         const headModule = this.moduleInfos && (this.moduleInfos[toolHead]); //
         if (!headModule) {
             log.error(`non-eixst toolhead[${toolHead}], moduleInfos:${JSON.stringify(this.moduleInfos)}`,);
@@ -495,7 +495,7 @@ class SocketBASE {
         }
         const { laserToolHeadInfo } = await this.sacpClient.getLaserToolHeadInfo(headModule.key);
         log.debug(`laserFocalLength:${laserToolHeadInfo.laserFocalLength}, materialThickness: ${materialThickness}, platformHeight:${laserToolHeadInfo.platformHeight}`);
-        await this.setAbsoluteWorkOrigin({ x: 0, y: 0, z: laserToolHeadInfo.laserFocalLength + laserToolHeadInfo.platformHeight + materialThickness });
+        await this.setAbsoluteWorkOrigin({ x: 0, y: 0, z: laserToolHeadInfo.laserFocalLength + laserToolHeadInfo.platformHeight + materialThickness, isRotate });
     }
 }
 

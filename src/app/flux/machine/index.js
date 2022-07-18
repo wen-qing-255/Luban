@@ -360,9 +360,6 @@ export const actions = {
             'Marlin:state': (options) => {
                 // Note: serialPort & Wifi -> for heartBeat
                 const { state } = options;
-                // console.log('==========================', state);
-                // console.log(state.moduleList);
-                // console.log(state.moduleStatusList);
                 const { headType, pos, originOffset, headStatus, headPower, temperature, zFocus, isHomed, zAxisModule, laser10WErrorState } = state;
                 const machineState = getState().machine;
                 if ((machineState.isRotate !== pos?.isFourAxis) && (headType === HEAD_LASER || headType === HEAD_CNC)) {
@@ -375,6 +372,7 @@ export const actions = {
                         || Number(machineState.workPosition.y) !== Number(pos.y)
                         || Number(machineState.workPosition.z) !== Number(pos.z)
                         || Number(machineState.workPosition.b) !== Number(pos.b)
+                        || machineState.workPosition.isFourAxis !== pos.isFourAxis
                     ) {
                         dispatch(
                             baseActions.updateState({
@@ -394,6 +392,7 @@ export const actions = {
                         Number(machineState.workPosition.x) !== Number(pos.x)
                         || Number(machineState.workPosition.y) !== Number(pos.y)
                         || Number(machineState.workPosition.z) !== Number(pos.z)
+                        || machineState.workPosition.isFourAxis !== pos.isFourAxis
                     ) {
                         dispatch(
                             baseActions.updateState({
@@ -453,7 +452,6 @@ export const actions = {
                     currentWorkNozzle,
                     gcodePrintingInfo
                 } = state;
-                // console.log('************', moduleStatusList);
                 dispatch(baseActions.updateState({
                     laser10WErrorState,
                     isEmergencyStopped
@@ -597,7 +595,6 @@ export const actions = {
                 let machineSeries = '';
                 const { toolHead, series, headType, status, isHomed, moduleStatusList, isMoving } = state;
                 const { seriesSize } = state;
-                console.log('connection', state);
                 dispatch(baseActions.updateState({
                     isHomed: isHomed,
                     isMoving,
